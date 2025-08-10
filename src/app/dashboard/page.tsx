@@ -1,0 +1,448 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/components/AuthProvider'
+import ProtectedRoute from '@/components/ProtectedRoute'
+import GameCompletionModal from '@/components/GameCompletionModal'
+import { supabase } from '@/lib/supabase'
+import { Challenge, DailyRecord, MoneyMonsterData } from '@/types'
+import { Skull, Calendar, TrendingDown, Target, Settings, LogOut, Plus } from 'lucide-react'
+import Link from 'next/link'
+import { getJstYmd, isAfterYmd, formatYmdToJa, addDaysToYmd } from '@/lib/utils'
+
+export default function DashboardPage() {
+  const { user, profile, signOut } = useAuth()
+  const router = useRouter()
+  const [challenge, setChallenge] = useState<Challenge | null>(null)
+  const [dailyRecords, setDailyRecords] = useState<DailyRecord[]>([])
+  const [loading, setLoading] = useState(false)
+  const [moneyMonsterData, setMoneyMonsterData] = useState<MoneyMonsterData | null>(null)
+  const [showCompletionModal, setShowCompletionModal] = useState(false)
+  const [finalWeight, setFinalWeight] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!user || !profile) return
+
+    const fetchChallengeData = async () => {
+      try {
+        setLoading(true)
+        // アクティブなチャレンジを取得
+        const { data: challengeData, error: challengeError } = await supabase
+          .from('challenges')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (challengeError && challengeError.code !== 'PGRST116') {
+          throw challengeError
+        }
+
+        if (!challengeData) {
+          // アクティブなチャレンジがない場合はオンボーディングへ
+          router.replace('/onboarding')
+          return
+        }
+
+        setChallenge(challengeData)
+
+        // 日次記録を取得（必要なカラムのみに絞って軽量化）
+        const { data: recordsData, error: recordsError } = await supabase
+          .from('daily_records')
+          .select('id, record_date, weight, is_completed, created_at, updated_at, challenge_id, mood_comment')
+          .eq('challenge_id', challengeData.id)
+          .order('record_date', { ascending: false })
+
+        if (recordsError) throw recordsError
+
+        setDailyRecords((recordsData || []) as DailyRecord[])
+
+        // マネーモンスターデータを計算
+        const recordedDays = recordsData?.length || 0
+        const achievementRate = (recordedDays / 30) * 100
+        const recoveredAmount = Math.floor((challengeData.participation_fee * recordedDays) / 30)
+        const remainingAmount = challengeData.participation_fee - recoveredAmount
+
+        setMoneyMonsterData({
+          maxHealth: challengeData.participation_fee,
+          currentHealth: remainingAmount,
+          recoveredAmount,
+          remainingAmount,
+          achievementRate,
+        })
+
+        // ゲーム完了チェック（JST基準のYYYY-MM-DD）
+        const endYmd = challengeData.end_date
+        const todayYmd = getJstYmd()
+        const isGameCompleted = isAfterYmd(todayYmd, endYmd) || recordedDays >= 30 || challengeData.status === 'completed'
+
+        if (isGameCompleted && challengeData.status !== 'completed') {
+          // 最終体重を取得
+          const latestRecord = recordsData?.[0]
+          setFinalWeight(latestRecord?.weight || challengeData.current_weight || null)
+          
+          // チャレンジを完了状態に更新
+          await supabase
+            .from('challenges')
+            .update({ status: 'completed' })
+            .eq('id', challengeData.id)
+
+          setShowCompletionModal(true)
+
+          // 自動返金: サーバーの返金APIを呼ぶ（返金額>0、未処理のみ）
+          try {
+            const { data: latestChallenge } = await supabase
+              .from('challenges')
+              .select('id, refund_amount, is_refund_processed')
+              .eq('id', challengeData.id)
+              .single()
+
+            if (latestChallenge && latestChallenge.refund_amount > 0 && !latestChallenge.is_refund_processed) {
+              await fetch('/api/stripe/process-refund', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ challengeId: challengeData.id }),
+              })
+            }
+          } catch (e) {
+            console.warn('Refund trigger failed (will rely on manual fallback):', e)
+          }
+        }
+
+        // 既にcompletedになっている場合でも、未返金なら再試行
+        if (challengeData.status === 'completed' && challengeData.refund_amount > 0 && !challengeData.is_refund_processed) {
+          try {
+            await fetch('/api/stripe/process-refund', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ challengeId: challengeData.id }),
+            })
+          } catch (e) {
+            console.warn('Refund retry on completed challenge failed:', e)
+          }
+        }
+
+      } catch (error) {
+        console.error('Error fetching challenge data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchChallengeData()
+  }, [user, profile, router])
+
+  const generateCalendarDays = () => {
+    if (!challenge) return []
+
+    const startYmd = challenge.start_date
+    const endYmd = challenge.end_date
+    const todayYmd = getJstYmd()
+    const days = []
+
+    for (let ymd = startYmd; ymd <= endYmd; ymd = addDaysToYmd(ymd, 1)) {
+      const dateStr = ymd
+      const record = dailyRecords.find(r => r.record_date === dateStr)
+      const isFuture = isAfterYmd(dateStr, todayYmd)
+
+      days.push({
+        date: dateStr,
+        status: isFuture ? 'future' : record ? 'recorded' : 'unrecorded',
+        isSuccess: record?.is_completed,
+      })
+    }
+
+    return days
+  }
+
+  const handleSignOut = async () => {
+    await signOut()
+    router.push('/')
+  }
+
+  const getToday = () => getJstYmd()
+
+  const hasTodaysRecord = () => {
+    const today = getToday()
+    return dailyRecords.some(record => record.record_date === today)
+  }
+
+  const handleRestartChallenge = async () => {
+    if (!user) return
+    
+    try {
+      // 現在のチャレンジを完了状態に更新
+      if (challenge) {
+        await supabase
+          .from('challenges')
+          .update({ status: 'completed' })
+          .eq('id', challenge.id)
+      }
+
+      // オンボーディングに移動して新しいチャレンジを開始
+      setShowCompletionModal(false)
+      router.push('/onboarding')
+    } catch (error) {
+      console.error('Error restarting challenge:', error)
+    }
+  }
+
+  const handleFinishChallenge = () => {
+    setShowCompletionModal(false)
+    // ダッシュボードに留まる（履歴として表示）
+  }
+
+  return (
+    <ProtectedRoute requireProfile={true}>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        {loading ? (
+          <div className="min-h-screen flex items-center justify-center">
+            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-purple-600"></div>
+          </div>
+        ) : (
+        <>
+        {/* ヘッダー */}
+        <header className="bg-white shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center space-x-2">
+                <Skull className="w-8 h-8 text-purple-600" />
+                <h1 className="text-xl font-bold text-gray-900">
+                  ダイエット30日チャレンジ
+                </h1>
+              </div>
+              <div className="flex items-center space-x-4">
+                <Link
+                  href="/settings"
+                  className="p-2 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100"
+                >
+                  <Settings className="w-5 h-5" />
+                </Link>
+                <button
+                  onClick={handleSignOut}
+                  className="p-2 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* マネーモンスターセクション */}
+          {moneyMonsterData && (
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl p-8 mb-8">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h2 className="text-2xl font-bold mb-4">マネーモンスターとの戦い</h2>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span>モンスターの体力</span>
+                      <span className="font-mono">
+                        ¥{moneyMonsterData.currentHealth.toLocaleString()} / ¥{moneyMonsterData.maxHealth.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="w-full bg-white/20 rounded-full h-4">
+                      <div 
+                        className="bg-white h-4 rounded-full transition-all duration-500"
+                        style={{ 
+                          width: `${((moneyMonsterData.maxHealth - moneyMonsterData.currentHealth) / moneyMonsterData.maxHealth) * 100}%` 
+                        }}
+                      ></div>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>取り戻した金額: ¥{moneyMonsterData.recoveredAmount.toLocaleString()}</span>
+                      <span>達成率: {moneyMonsterData.achievementRate.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="ml-8">
+                  <Skull className="w-24 h-24" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="grid lg:grid-cols-3 gap-8">
+            {/* メインコンテンツ */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* 今日の記録ボタン */}
+              <div className="bg-white rounded-2xl shadow-sm p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">今日の記録</h3>
+                    <p className="text-gray-600">
+                      {hasTodaysRecord() ? '今日の記録は完了しています！' : '今日の記録をつけてマネーモンスターにダメージを与えよう！'}
+                    </p>
+                  </div>
+                  <Link
+                    href="/record"
+                    className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-medium transition-colors ${
+                      hasTodaysRecord()
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-purple-600 text-white hover:bg-purple-700'
+                    }`}
+                  >
+                    <Plus className="w-5 h-5" />
+                    <span>{hasTodaysRecord() ? '記録を確認' : '記録する'}</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* 進捗統計 */}
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="bg-white rounded-xl shadow-sm p-6">
+                  <div className="flex items-center space-x-3">
+                    <Calendar className="w-8 h-8 text-blue-500" />
+                    <div>
+                      <p className="text-sm text-gray-600">記録日数</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {dailyRecords.length}/30
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm p-6">
+                  <div className="flex items-center space-x-3">
+                    <TrendingDown className="w-8 h-8 text-green-500" />
+                    <div>
+                      <p className="text-sm text-gray-600">体重変化</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {challenge && challenge.current_weight && challenge.initial_weight 
+                          ? `${(challenge.initial_weight - challenge.current_weight).toFixed(1)}kg`
+                          : '-'
+                        }
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm p-6">
+                  <div className="flex items-center space-x-3">
+                    <Target className="w-8 h-8 text-purple-500" />
+                    <div>
+                      <p className="text-sm text-gray-600">達成率</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {moneyMonsterData ? `${moneyMonsterData.achievementRate.toFixed(1)}%` : '0%'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 最近の記録 */}
+              <div className="bg-white rounded-2xl shadow-sm p-6">
+                <h3 className="text-xl font-bold text-gray-900 mb-4">最近の記録</h3>
+                {dailyRecords.length > 0 ? (
+                  <div className="space-y-3">
+                    {dailyRecords.slice(0, 5).map((record) => (
+                      <div key={record.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-3 h-3 rounded-full ${
+                            record.is_completed ? 'bg-green-500' : 'bg-yellow-500'
+                          }`}></div>
+                          <span className="font-medium">{formatYmdToJa(record.record_date)}</span>
+                          {record.weight && (
+                            <span className="text-gray-600">{record.weight}kg</span>
+                          )}
+                        </div>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          record.is_completed 
+                            ? 'bg-green-100 text-green-700' 
+                            : 'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {record.is_completed ? '記録完了' : '記録済み'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-8">まだ記録がありません</p>
+                )}
+              </div>
+            </div>
+
+            {/* サイドバー */}
+            <div className="space-y-6">
+              {/* チャレンジカレンダー */}
+              <div className="bg-white rounded-2xl shadow-sm p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">30日間カレンダー</h3>
+                <div className="grid grid-cols-7 gap-1 text-xs">
+                  {['日', '月', '火', '水', '木', '金', '土'].map((day) => (
+                    <div key={day} className="p-2 text-center font-medium text-gray-500">
+                      {day}
+                    </div>
+                  ))}
+                  {generateCalendarDays().map((day, index) => (
+                    <div
+                      key={index}
+                      className={`p-2 text-center text-xs rounded ${
+                        day.status === 'recorded'
+                          ? 'bg-green-100 text-green-700'
+                          : day.status === 'unrecorded'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      {Number(day.date.split('-')[2])}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 space-y-2 text-xs">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-green-100 rounded"></div>
+                    <span>記録済み</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-red-100 rounded"></div>
+                    <span>未記録</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-gray-100 rounded"></div>
+                    <span>未来</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 目標情報 */}
+              {challenge && (
+                <div className="bg-white rounded-2xl shadow-sm p-6">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4">チャレンジ情報</h3>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">開始日</span>
+                      <span className="font-medium">{formatYmdToJa(challenge.start_date)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">終了日</span>
+                      <span className="font-medium">{formatYmdToJa(challenge.end_date)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">初期体重</span>
+                      <span className="font-medium">{challenge.initial_weight}kg</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">目標体重</span>
+                      <span className="font-medium">{challenge.target_weight}kg</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">参加費</span>
+                      <span className="font-medium">¥{challenge.participation_fee.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        </>
+        )}
+      </div>
+    </ProtectedRoute>
+  )
+}
