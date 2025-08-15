@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
@@ -23,8 +23,6 @@ export const metadata: Metadata = {
     apple: '/apple-touch-icon.png',
   },
   manifest: '/site.webmanifest',
-  themeColor: '#3B82F6',
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
   metadataBase: new URL(process.env.NODE_ENV === 'production' ? 'https://diet-challenge.app' : 'http://localhost:3000'),
   alternates: {
     canonical: '/',
@@ -45,6 +43,13 @@ export const metadata: Metadata = {
     // google: 'your-google-verification-code',
     // other: 'your-other-verification-code',
   },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: '#3B82F6',
 };
 
 export default function RootLayout({

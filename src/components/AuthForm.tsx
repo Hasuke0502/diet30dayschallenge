@@ -43,14 +43,22 @@ export default function AuthForm({ mode }: AuthFormProps) {
         // アナリティクス追跡
         analytics.signUp()
         // 確認メールのポップアップを削除し、onboardingページに遷移
-        router.replace('/onboarding')
+        // 少し遅延を入れて画面の乱れを防ぐ
+        setTimeout(() => {
+          router.replace('/onboarding')
+        }, 100)
       } else {
         console.log('サインイン処理開始')
         const { error, data } = await auth.signIn(email, password)
         console.log('サインイン結果:', { error, data })
         if (error) throw error
         clearTimeout(timeoutId)
-        router.replace('/dashboard')
+        
+        // ログイン成功後、少し遅延を入れてからダッシュボードに遷移
+        // これにより認証状態の更新と画面遷移の競合を防ぐ
+        setTimeout(() => {
+          router.replace('/dashboard')
+        }, 100)
       }
     } catch (error: unknown) {
       console.error('認証エラー:', error)
@@ -58,7 +66,11 @@ export default function AuthForm({ mode }: AuthFormProps) {
       setError(error instanceof Error ? error.message : 'エラーが発生しました')
     } finally {
       clearTimeout(timeoutId)
-      setLoading(false)
+      // エラーが発生した場合のみローディング状態を解除
+      // 成功時は遷移までローディング状態を維持
+      if (error) {
+        setLoading(false)
+      }
     }
   }
 
@@ -93,9 +105,10 @@ export default function AuthForm({ mode }: AuthFormProps) {
               id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
               placeholder="your@email.com"
               required
+              disabled={loading}
             />
           </div>
         </div>
@@ -111,15 +124,17 @@ export default function AuthForm({ mode }: AuthFormProps) {
               id="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
               placeholder="パスワードを入力"
               required
               minLength={6}
+              disabled={loading}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={loading}
             >
               {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
@@ -135,9 +150,16 @@ export default function AuthForm({ mode }: AuthFormProps) {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+          className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-4 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 relative"
         >
-          {loading ? '処理中...' : mode === 'signin' ? 'ログイン' : 'アカウント作成'}
+          {loading ? (
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+              {mode === 'signin' ? 'ログイン中...' : '作成中...'}
+            </div>
+          ) : (
+            mode === 'signin' ? 'ログイン' : 'アカウント作成'
+          )}
         </button>
       </form>
 

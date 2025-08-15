@@ -18,7 +18,8 @@ export default function DashboardPage() {
   const { playClickSound } = useSound()
   const [challenge, setChallenge] = useState<Challenge | null>(null)
   const [dailyRecords, setDailyRecords] = useState<DailyRecord[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [moneyMonsterData, setMoneyMonsterData] = useState<MoneyMonsterData | null>(null)
   const [isGameCompleted, setIsGameCompleted] = useState(false)
   const [unlockedPlan, setUnlockedPlan] = useState<'basic' | 'intermediate' | 'advanced' | null>(null)
@@ -126,12 +127,11 @@ export default function DashboardPage() {
 
         setIsGameCompleted(gameCompleted)
 
-
-
       } catch (error) {
         console.error('Error fetching challenge data:', error)
       } finally {
         setLoading(false)
+        setIsInitialLoad(false)
       }
     }
 
@@ -208,9 +208,12 @@ export default function DashboardPage() {
   return (
     <ProtectedRoute requireProfile={true}>
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        {loading ? (
+        {isInitialLoad ? (
           <div className="min-h-screen flex items-center justify-center">
-            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-purple-600"></div>
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">データを読み込み中...</p>
+            </div>
           </div>
         ) : (
         <>
@@ -280,7 +283,19 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div className="grid lg:grid-cols-3 gap-8">
+          {/* データが読み込まれていない場合の表示 */}
+          {!challenge && !loading && (
+            <div className="bg-white rounded-2xl shadow-sm p-8 mb-8 text-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">チャレンジ情報を読み込み中...</p>
+            </div>
+          )}
+
+          {/* チャレンジ情報が読み込まれた場合のみ表示 */}
+          
+
+          {challenge && (
+            <div className="grid lg:grid-cols-3 gap-8">
             {/* メインコンテンツ */}
             <div className="lg:col-span-2 space-y-6">
               {/* 今日の記録ボタン */}
@@ -484,9 +499,8 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+          )}
         </div>
-        </>
-        )}
 
         {/* ゲーム完了モーダル */}
         {isGameCompleted && challenge && moneyMonsterData && (
@@ -500,6 +514,9 @@ export default function DashboardPage() {
             onFinishChallenge={handleFinishChallenge}
           />
         )}
+        </>
+        )
+        }
       </div>
     </ProtectedRoute>
   )

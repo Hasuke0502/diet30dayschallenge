@@ -33,7 +33,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isInitializing, setIsInitializing] = useState(true)
+  const [isTransitioning, setIsTransitioning] = useState(false)
   const lastFetchedUserIdRef = useRef<string | null>(null)
+  const isTransitioningRef = useRef(false)
+  const previousUserRef = useRef<string | null>(null)
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -65,33 +69,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // 初期セッション取得
     const getInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setUser(session?.user ?? null)
-      
-      if (session?.user) {
-        const profileData = await fetchProfile(session.user.id)
-        setProfile(profileData)
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        const currentUserId = session?.user?.id || null
+        
+        // ユーザーIDが変更された場合のみ状態を更新
+        if (previousUserRef.current !== currentUserId) {
+          setUser(session?.user ?? null)
+          previousUserRef.current = currentUserId
+          
+          if (session?.user) {
+            const profileData = await fetchProfile(session.user.id)
+            setProfile(profileData)
+          } else {
+            setProfile(null)
+          }
+        }
+      } catch (error) {
+        console.error('初期セッション取得エラー:', error)
+      } finally {
+        setLoading(false)
+        setIsInitializing(false)
       }
-      
-      setLoading(false)
     }
 
     getInitialSession()
 
     // 認証状態変更のリスナー
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setUser(session?.user ?? null)
+      async (event, session) => {
+        // 遷移中は状態更新をスキップ
+        if (isTransitioningRef.current) {
+          return
+        }
 
-        if (session?.user) {
-          // 同一ユーザーで既に取得済みの場合の無駄な再フェッチを避ける
-          if (lastFetchedUserIdRef.current !== session.user.id || !profile) {
-            const profileData = await fetchProfile(session.user.id)
-            setProfile(profileData)
+        const currentUserId = session?.user?.id || null
+        
+        // ユーザーIDが変更された場合のみ状態を更新
+        if (previousUserRef.current !== currentUserId) {
+          console.log('認証状態変更:', event, currentUserId)
+          
+          setUser(session?.user ?? null)
+          previousUserRef.current = currentUserId
+
+          if (session?.user) {
+            // 同一ユーザーで既に取得済みの場合の無駄な再フェッチを避ける
+            if (lastFetchedUserIdRef.current !== session.user.id || !profile) {
+              const profileData = await fetchProfile(session.user.id)
+              setProfile(profileData)
+            }
+          } else {
+            setProfile(null)
+            lastFetchedUserIdRef.current = null
           }
-        } else {
-          setProfile(null)
-          lastFetchedUserIdRef.current = null
         }
 
         setLoading(false)
@@ -102,13 +132,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [profile])
 
   const signOut = async () => {
-    await supabase.auth.signOut()
+    isTransitioningRef.current = true
+    setIsTransitioning(true)
+    try {
+      await supabase.auth.signOut()
+    } finally {
+      // サインアウト後、少し遅延を入れてから状態をリセット
+      setTimeout(() => {
+        isTransitioningRef.current = false
+        setIsTransitioning(false)
+      }, 200)
+    }
   }
 
   const value = {
     user,
     profile,
-    loading,
+    loading: loading || isInitializing || isTransitioning,
     signOut,
     refreshProfile,
   }
