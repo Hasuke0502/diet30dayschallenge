@@ -4,6 +4,13 @@ import { Database } from '@/types/database'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
+// デバッグ用: 環境変数の値を確認（本番環境では削除）
+console.log('Supabase設定確認:', {
+  url: supabaseUrl ? `${supabaseUrl.substring(0, 20)}...` : '未設定',
+  hasKey: !!supabaseAnonKey,
+  env: process.env.NODE_ENV
+})
+
 if (!supabaseUrl || !supabaseAnonKey) {
   const missing = [
     !supabaseUrl ? 'NEXT_PUBLIC_SUPABASE_URL' : null,

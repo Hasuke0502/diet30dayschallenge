@@ -1,9 +1,64 @@
+import type { Metadata } from 'next'
 import { Skull, Coins, Target, Calendar } from 'lucide-react'
 import Link from 'next/link'
 
+export const metadata: Metadata = {
+  title: 'ダイエット30日チャレンジ | マネーモンスターを倒してお金と健康を取り戻そう',
+  description: 'お菓子の甘い誘惑から生まれた悪しき存在「マネーモンスター」があなたのお金を奪っている！毎日の記録でマネーモンスターにダメージを与え、お金を取り戻そう！30日間のダイエットチャレンジで健康とお金の両方を手に入れましょう。',
+  keywords: 'ダイエット, チャレンジ, 30日, お金, 健康, 記録, マネーモンスター',
+  openGraph: {
+    title: 'ダイエット30日チャレンジ | マネーモンスターを倒してお金と健康を取り戻そう',
+    description: 'お菓子の甘い誘惑から生まれた悪しき存在「マネーモンスター」があなたのお金を奪っている！毎日の記録でマネーモンスターにダメージを与え、お金を取り戻そう！',
+    type: 'website',
+    locale: 'ja_JP',
+    url: 'https://diet-challenge.app',
+    siteName: 'ダイエット30日チャレンジ',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    site: '@diet_challenge',
+    title: 'ダイエット30日チャレンジ',
+    description: 'マネーモンスターを倒してお金と健康を取り戻そう！',
+  },
+}
+
 export default function Home() {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "ダイエット30日チャレンジ",
+    "description": "お菓子の甘い誘惑から生まれた悪しき存在「マネーモンスター」があなたのお金を奪っている！毎日の記録でマネーモンスターにダメージを与え、お金を取り戻そう！",
+    "url": "https://diet-challenge.app",
+    "applicationCategory": "HealthApplication",
+    "operatingSystem": "Web",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "JPY",
+      "description": "基本利用は無料、参加費は任意設定"
+    },
+    "featureList": [
+      "30日間のダイエットチャレンジ",
+      "日次記録機能",
+      "返金システム",
+      "ゲーミフィケーション要素",
+      "進捗可視化"
+    ],
+    "author": {
+      "@type": "Person",
+      "name": "大久保葉介"
+    },
+    "inLanguage": "ja-JP",
+    "keywords": "ダイエット, チャレンジ, 30日, お金, 健康, 記録, マネーモンスター"
+  }
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
+      <div className="min-h-screen flex flex-col">
       {/* ヘッダー */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -194,6 +249,7 @@ export default function Home() {
           </p>
         </div>
       </footer>
-    </div>
+      </div>
+    </>
   )
 }

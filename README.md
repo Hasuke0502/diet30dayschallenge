@@ -32,6 +32,7 @@
 - **フォーム**: React Hook Form, Zod (バリデーション)
 - **グラフ**: Recharts
 - **日付処理**: date-fns
+- **アナリティクス**: Google Analytics 4
 
 ## セットアップ
 
@@ -40,6 +41,7 @@
 - npm または yarn
 - Supabase アカウント
 - Stripe アカウント（決済機能使用時）
+- Google Analytics アカウント（アナリティクス機能使用時）
 
 ### インストール
 
@@ -71,6 +73,9 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 # Stripe（決済機能を使う場合）
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
 STRIPE_SECRET_KEY=your_stripe_secret_key
+
+# Google Analytics（アナリティクス機能を使う場合）
+NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
 ```
 
 4. データベースセットアップ

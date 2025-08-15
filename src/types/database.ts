@@ -12,6 +12,8 @@ export interface Database {
           snack_frequency_period: 'day' | 'week' | 'month' | null
           snack_frequency_count: number | null
           record_time: string | null
+          unlocked_plans: ('basic' | 'intermediate' | 'advanced')[] | null
+          pending_unlock_notification: ('basic' | 'intermediate' | 'advanced') | null
         }
         Insert: {
           id: string
@@ -21,6 +23,8 @@ export interface Database {
           snack_frequency_period?: 'day' | 'week' | 'month' | null
           snack_frequency_count?: number | null
           record_time?: string | null
+          unlocked_plans?: ('basic' | 'intermediate' | 'advanced')[] | null
+          pending_unlock_notification?: ('basic' | 'intermediate' | 'advanced') | null
         }
         Update: {
           email?: string
@@ -29,6 +33,8 @@ export interface Database {
           snack_frequency_period?: 'day' | 'week' | 'month' | null
           snack_frequency_count?: number | null
           record_time?: string | null
+          unlocked_plans?: ('basic' | 'intermediate' | 'advanced')[] | null
+          pending_unlock_notification?: ('basic' | 'intermediate' | 'advanced') | null
         }
       }
       challenges: {
@@ -49,8 +55,7 @@ export interface Database {
           target_weight: number | null
           refund_amount: number
           is_refund_processed: boolean
-          payment_intent_id: string | null
-          refund_id: string | null
+
         }
         Insert: {
           user_id: string
@@ -61,7 +66,6 @@ export interface Database {
           initial_weight?: number | null
           current_weight?: number | null
           target_weight?: number | null
-          payment_intent_id?: string | null
         }
         Update: {
           recorded_days_count?: number
@@ -70,8 +74,7 @@ export interface Database {
           status?: 'active' | 'completed' | 'abandoned'
           refund_amount?: number
           is_refund_processed?: boolean
-          payment_intent_id?: string | null
-          refund_id?: string | null
+
         }
       }
       diet_methods: {

@@ -9,17 +9,20 @@ import { supabase } from '@/lib/supabase'
 import { Challenge, DailyRecord, MoneyMonsterData } from '@/types'
 import { Skull, Calendar, TrendingDown, Target, Settings, LogOut, Plus } from 'lucide-react'
 import Link from 'next/link'
-import { getJstYmd, isAfterYmd, formatYmdToJa, addDaysToYmd } from '@/lib/utils'
+import { getJstYmd, isAfterYmd, formatYmdToJa, addDaysToYmd, calculateRefund, calculateDietSuccessDays, hasAnyDietFailure, unlockNextPlan } from '@/lib/utils'
+import { useSound } from '@/hooks/useSound'
 
 export default function DashboardPage() {
   const { user, profile, signOut } = useAuth()
   const router = useRouter()
+  const { playClickSound } = useSound()
   const [challenge, setChallenge] = useState<Challenge | null>(null)
   const [dailyRecords, setDailyRecords] = useState<DailyRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [moneyMonsterData, setMoneyMonsterData] = useState<MoneyMonsterData | null>(null)
-  const [showCompletionModal, setShowCompletionModal] = useState(false)
-  const [finalWeight, setFinalWeight] = useState<number | null>(null)
+  const [isGameCompleted, setIsGameCompleted] = useState(false)
+  const [unlockedPlan, setUnlockedPlan] = useState<'basic' | 'intermediate' | 'advanced' | null>(null)
+
 
   useEffect(() => {
     if (!user || !profile) return
@@ -60,10 +63,31 @@ export default function DashboardPage() {
 
         setDailyRecords((recordsData || []) as DailyRecord[])
 
-        // マネーモンスターデータを計算
+        // マネーモンスターデータを計算（プラン別）
         const recordedDays = recordsData?.length || 0
         const achievementRate = (recordedDays / 30) * 100
-        const recoveredAmount = Math.floor((challengeData.participation_fee * recordedDays) / 30)
+        
+        // プラン別の返金額計算
+        let recoveredAmount = 0
+        switch (challengeData.refund_plan) {
+          case 'basic':
+            recoveredAmount = calculateRefund(challengeData.participation_fee, 'basic', recordedDays, 0, false)
+            break
+          
+          case 'intermediate':
+            const dietSuccessDays = await calculateDietSuccessDays(challengeData.id, supabase)
+            recoveredAmount = calculateRefund(challengeData.participation_fee, 'intermediate', recordedDays, dietSuccessDays, false)
+            break
+          
+          case 'advanced':
+            const hasFailure = await hasAnyDietFailure(challengeData.id, supabase)
+            recoveredAmount = calculateRefund(challengeData.participation_fee, 'advanced', recordedDays, 0, hasFailure)
+            break
+          
+          default:
+            recoveredAmount = calculateRefund(challengeData.participation_fee, 'basic', recordedDays, 0, false)
+        }
+        
         const remainingAmount = challengeData.participation_fee - recoveredAmount
 
         setMoneyMonsterData({
@@ -77,53 +101,32 @@ export default function DashboardPage() {
         // ゲーム完了チェック（JST基準のYYYY-MM-DD）
         const endYmd = challengeData.end_date
         const todayYmd = getJstYmd()
-        const isGameCompleted = isAfterYmd(todayYmd, endYmd) || recordedDays >= 30 || challengeData.status === 'completed'
+        const gameCompleted = isAfterYmd(todayYmd, endYmd) || recordedDays >= 30 || challengeData.status === 'completed'
 
-        if (isGameCompleted && challengeData.status !== 'completed') {
-          // 最終体重を取得
-          const latestRecord = recordsData?.[0]
-          setFinalWeight(latestRecord?.weight || challengeData.current_weight || null)
-          
+        if (gameCompleted && challengeData.status !== 'completed') {
           // チャレンジを完了状態に更新
           await supabase
             .from('challenges')
             .update({ status: 'completed' })
             .eq('id', challengeData.id)
 
-          setShowCompletionModal(true)
-
-          // 自動返金: サーバーの返金APIを呼ぶ（返金額>0、未処理のみ）
+          // プラン解放処理
           try {
-            const { data: latestChallenge } = await supabase
-              .from('challenges')
-              .select('id, refund_amount, is_refund_processed')
-              .eq('id', challengeData.id)
-              .single()
-
-            if (latestChallenge && latestChallenge.refund_amount > 0 && !latestChallenge.is_refund_processed) {
-              await fetch('/api/stripe/process-refund', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ challengeId: challengeData.id }),
-              })
-            }
-          } catch (e) {
-            console.warn('Refund trigger failed (will rely on manual fallback):', e)
+            const newUnlockedPlan = await unlockNextPlan(
+              user.id,
+              challengeData.refund_plan,
+              recordedDays,
+              supabase
+            )
+            setUnlockedPlan(newUnlockedPlan)
+          } catch (error) {
+            console.error('Error unlocking next plan:', error)
           }
         }
 
-        // 既にcompletedになっている場合でも、未返金なら再試行
-        if (challengeData.status === 'completed' && challengeData.refund_amount > 0 && !challengeData.is_refund_processed) {
-          try {
-            await fetch('/api/stripe/process-refund', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ challengeId: challengeData.id }),
-            })
-          } catch (e) {
-            console.warn('Refund retry on completed challenge failed:', e)
-          }
-        }
+        setIsGameCompleted(gameCompleted)
+
+
 
       } catch (error) {
         console.error('Error fetching challenge data:', error)
@@ -159,6 +162,7 @@ export default function DashboardPage() {
   }
 
   const handleSignOut = async () => {
+    playClickSound()
     await signOut()
     router.push('/')
   }
@@ -182,8 +186,11 @@ export default function DashboardPage() {
           .eq('id', challenge.id)
       }
 
+      // モーダルを閉じる
+      setIsGameCompleted(false)
+      setUnlockedPlan(null)
+
       // オンボーディングに移動して新しいチャレンジを開始
-      setShowCompletionModal(false)
       router.push('/onboarding')
     } catch (error) {
       console.error('Error restarting challenge:', error)
@@ -191,9 +198,12 @@ export default function DashboardPage() {
   }
 
   const handleFinishChallenge = () => {
-    setShowCompletionModal(false)
-    // ダッシュボードに留まる（履歴として表示）
+    // モーダルを閉じるだけ（チャレンジは完了状態のまま）
+    setIsGameCompleted(false)
+    setUnlockedPlan(null)
   }
+
+
 
   return (
     <ProtectedRoute requireProfile={true}>
@@ -222,7 +232,10 @@ export default function DashboardPage() {
                   <Settings className="w-5 h-5" />
                 </Link>
                 <button
-                  onClick={handleSignOut}
+                  onClick={() => {
+                    playClickSound();
+                    handleSignOut();
+                  }}
                   className="p-2 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100"
                 >
                   <LogOut className="w-5 h-5" />
@@ -281,6 +294,7 @@ export default function DashboardPage() {
                   </div>
                   <Link
                     href="/record"
+                    onClick={() => playClickSound()}
                     className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-medium transition-colors ${
                       hasTodaysRecord()
                         ? 'bg-green-100 text-green-700 hover:bg-green-200'
@@ -330,6 +344,37 @@ export default function DashboardPage() {
                       <p className="text-2xl font-bold text-gray-900">
                         {moneyMonsterData ? `${moneyMonsterData.achievementRate.toFixed(1)}%` : '0%'}
                       </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* プラン情報 */}
+              <div className="bg-white rounded-2xl shadow-sm p-6">
+                <h3 className="text-xl font-bold text-gray-900 mb-4">選択中のプラン</h3>
+                <div className="p-4 bg-purple-50 rounded-lg border-2 border-purple-200">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-bold text-purple-900 text-lg">
+                        {challenge?.refund_plan === 'basic' && 'プラン'}
+                        {challenge?.refund_plan === 'intermediate' && '中級プラン'}
+                        {challenge?.refund_plan === 'advanced' && '上級プラン'}
+                      </h4>
+                      <p className="text-purple-700 text-sm mt-1">
+                        {challenge?.refund_plan === 'basic' && '記録成功日数に応じて返金'}
+                        {challenge?.refund_plan === 'intermediate' && 'ダイエット成功日数（全ダイエット法達成日）に応じて返金'}
+                        {challenge?.refund_plan === 'advanced' && '厳格ルール：毎日達成で満額返金、失敗で返金なし'}
+                      </p>
+                      {challenge?.refund_plan === 'intermediate' && (
+                        <p className="text-xs text-purple-600 mt-1">
+                          ※ ダイエット成功日 = 選択したダイエット法を全て達成した日数
+                        </p>
+                      )}
+                      {challenge?.refund_plan === 'advanced' && (
+                        <p className="text-xs text-purple-600 mt-1">
+                          ※ 一度でも失敗または未記録で返金対象外
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -441,6 +486,19 @@ export default function DashboardPage() {
           </div>
         </div>
         </>
+        )}
+
+        {/* ゲーム完了モーダル */}
+        {isGameCompleted && challenge && moneyMonsterData && (
+          <GameCompletionModal
+            isOpen={isGameCompleted}
+            challenge={challenge}
+            moneyMonsterData={moneyMonsterData}
+            finalWeight={dailyRecords.length > 0 ? dailyRecords[0]?.weight : null}
+            unlockedPlan={unlockedPlan}
+            onRestartChallenge={handleRestartChallenge}
+            onFinishChallenge={handleFinishChallenge}
+          />
         )}
       </div>
     </ProtectedRoute>

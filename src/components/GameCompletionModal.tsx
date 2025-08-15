@@ -4,12 +4,14 @@ import { useState } from 'react'
 // import { useRouter } from 'next/navigation'
 import { Challenge, MoneyMonsterData } from '@/types'
 import { Skull, Trophy, Target, TrendingDown, Coins } from 'lucide-react'
+import { getPlanDisplayName } from '@/lib/utils'
 
 interface GameCompletionModalProps {
   isOpen: boolean
   challenge: Challenge
   moneyMonsterData: MoneyMonsterData
   finalWeight: number | null
+  unlockedPlan?: 'basic' | 'intermediate' | 'advanced' | null
   onRestartChallenge: () => void
   onFinishChallenge: () => void
 }
@@ -19,6 +21,7 @@ export default function GameCompletionModal({
   challenge,
   moneyMonsterData,
   finalWeight,
+  unlockedPlan,
   onRestartChallenge,
   onFinishChallenge,
 }: GameCompletionModalProps) {
@@ -140,6 +143,24 @@ export default function GameCompletionModal({
               返金が完了次第、登録されたメールアドレスにご連絡いたします。
             </p>
           </div>
+
+          {/* プラン解放通知 */}
+          {unlockedPlan && (
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-6 mb-6">
+              <div className="text-center">
+                <div className="text-4xl mb-2">🎉</div>
+                <h3 className="text-xl font-bold text-purple-900 mb-2">
+                  新しいチャレンジプランが解放されました！
+                </h3>
+                <p className="text-purple-700 font-medium">
+                  次回は{getPlanDisplayName(unlockedPlan)}プランに挑戦できます！
+                </p>
+                <p className="text-sm text-purple-600 mt-2">
+                  より高い難易度で自分に挑戦してみましょう！
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* アクション選択 */}
           <div className="flex flex-col space-y-4">

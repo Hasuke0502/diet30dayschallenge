@@ -18,8 +18,7 @@ export interface Challenge {
   target_weight: number | null
   refund_amount: number
   is_refund_processed: boolean
-  payment_intent_id: string | null
-  refund_id: string | null
+
 }
 
 export interface DietMethod {
@@ -69,6 +68,8 @@ export interface Profile {
   snack_frequency_period: 'day' | 'week' | 'month' | null
   snack_frequency_count: number | null
   record_time: string | null
+  unlocked_plans: ('basic' | 'intermediate' | 'advanced')[] | null
+  pending_unlock_notification: ('basic' | 'intermediate' | 'advanced') | null
 }
 
 // フォーム用の型

@@ -6,9 +6,11 @@ import ProtectedRoute from '@/components/ProtectedRoute'
 // import { supabase } from '@/lib/supabase'
 import { ArrowLeft, User, Mail, Send } from 'lucide-react'
 import Link from 'next/link'
+import { useSound } from '@/hooks/useSound'
 
 export default function SettingsPage() {
   const { user, profile } = useAuth()
+  const { playClickSound, isSoundEnabled, toggleSound } = useSound()
   const [contactForm, setContactForm] = useState({
     subject: '',
     message: '',
@@ -99,14 +101,34 @@ export default function SettingsPage() {
                       </label>
                       <span className="text-gray-900">{profile.target_weight}kg</span>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        記録時間
-                      </label>
-                      <span className="text-gray-900">{profile.record_time}</span>
-                    </div>
                   </>
                 )}
+              </div>
+            </div>
+
+            {/* 音声設定 */}
+            <div className="bg-white rounded-2xl shadow-sm p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">音声設定</h2>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-700">クリック音</p>
+                  <p className="text-sm text-gray-500">ボタンを押した時の音声効果</p>
+                </div>
+                <button
+                  onClick={() => {
+                    playClickSound();
+                    toggleSound();
+                  }}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    isSoundEnabled ? 'bg-purple-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      isSoundEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
               </div>
             </div>
 
@@ -126,7 +148,10 @@ export default function SettingsPage() {
                     ご連絡いただきありがとうございます。お返事までしばらくお待ちください。
                   </p>
                   <button
-                    onClick={() => setSubmitted(false)}
+                    onClick={() => {
+                      playClickSound();
+                      setSubmitted(false);
+                    }}
                     className="mt-4 text-purple-600 hover:text-purple-700 font-medium"
                   >
                     新しいお問い合わせを送信
@@ -168,6 +193,7 @@ export default function SettingsPage() {
 
                   <button
                     type="submit"
+                    onClick={() => playClickSound()}
                     disabled={submitting || !contactForm.subject || !contactForm.message}
                     className="w-full bg-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-purple-700 focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >

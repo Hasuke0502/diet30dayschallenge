@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { auth } from '@/lib/supabase'
 import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react'
+import { useAnalyticsEvents } from '@/hooks/useAnalytics'
 
 interface AuthFormProps {
   mode: 'signin' | 'signup'
@@ -12,36 +13,51 @@ interface AuthFormProps {
 export default function AuthForm({ mode }: AuthFormProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
+  const analytics = useAnalyticsEvents()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    
+    console.log('フォーム送信開始:', { mode, email, password: password.length })
 
-    if (mode === 'signup' && password !== confirmPassword) {
-      setError('パスワードが一致しません')
+    // タイムアウト処理を追加
+    const timeoutId = setTimeout(() => {
+      console.log('処理がタイムアウトしました')
+      setError('処理がタイムアウトしました。ネットワーク接続を確認してください。')
       setLoading(false)
-      return
-    }
+    }, 30000) // 30秒でタイムアウト
 
     try {
       if (mode === 'signup') {
-        const { error } = await auth.signUp(email, password)
+        console.log('サインアップ処理開始')
+        const { error, data } = await auth.signUp(email, password)
+        console.log('サインアップ結果:', { error, data })
         if (error) throw error
-        alert('確認メールを送信しました。メールをご確認ください。')
+        clearTimeout(timeoutId)
+        // アナリティクス追跡
+        analytics.signUp()
+        // 確認メールのポップアップを削除し、onboardingページに遷移
+        router.replace('/onboarding')
       } else {
-        const { error } = await auth.signIn(email, password)
+        console.log('サインイン処理開始')
+        const { error, data } = await auth.signIn(email, password)
+        console.log('サインイン結果:', { error, data })
         if (error) throw error
+        clearTimeout(timeoutId)
         router.replace('/dashboard')
       }
     } catch (error: unknown) {
+      console.error('認証エラー:', error)
+      clearTimeout(timeoutId)
       setError(error instanceof Error ? error.message : 'エラーが発生しました')
     } finally {
+      clearTimeout(timeoutId)
       setLoading(false)
     }
   }
@@ -109,27 +125,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
             </button>
           </div>
         </div>
-
-        {mode === 'signup' && (
-          <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
-              パスワード確認
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                id="confirmPassword"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                placeholder="パスワードを再入力"
-                required
-                minLength={6}
-              />
-            </div>
-          </div>
-        )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-3">

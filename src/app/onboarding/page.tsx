@@ -6,8 +6,18 @@ import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import { DietMethod } from '@/types'
 import { Skull, Weight, Target, Clock, Coins, Plus, X, Lock } from 'lucide-react'
-import StripePayment from '@/components/StripePayment'
-import { getJstYmd, addDaysToYmd } from '@/lib/utils'
+import { useSound } from '@/hooks/useSound'
+
+import { 
+  getJstYmd, 
+  addDaysToYmd,
+  isPlanUnlocked,
+  getPlanDisplayName,
+  getUnlockConditionMessage,
+  getInitialUnlockedPlans,
+  clearUnlockNotification,
+  getUnlockNotificationMessage
+} from '@/lib/utils'
 
 // フォールバックのデフォルトダイエット法（DBが空でも提示）
 const DEFAULT_DIET_METHODS = [
@@ -41,8 +51,9 @@ const DEFAULT_DIET_METHODS = [
 const createTempIdFromName = (name: string) => `temp:${name}`
 
 export default function OnboardingPage() {
-  const { user, refreshProfile } = useAuth()
+  const { user, profile, refreshProfile } = useAuth()
   const router = useRouter()
+  const { playClickSound } = useSound()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
 
@@ -56,8 +67,32 @@ export default function OnboardingPage() {
   const [snackCount, setSnackCount] = useState('3')
   const [participationFee, setParticipationFee] = useState(0)
   const [recordTime, setRecordTime] = useState('20:00')
-  const [showPayment, setShowPayment] = useState(false)
   const [refundPlan, setRefundPlan] = useState<'basic' | 'intermediate' | 'advanced'>('basic')
+  const [unlockedPlans, setUnlockedPlans] = useState<('basic' | 'intermediate' | 'advanced')[] | null>(null)
+  const [showUnlockNotification, setShowUnlockNotification] = useState<'basic' | 'intermediate' | 'advanced' | null>(null)
+
+  // プロフィール情報からプラン解放状況を取得
+  useEffect(() => {
+    if (!user || !profile) return
+
+    // プラン解放状況を設定
+    const userUnlockedPlans = profile.unlocked_plans || getInitialUnlockedPlans()
+    setUnlockedPlans(userUnlockedPlans)
+
+    // 解放済みプランのうち最初に解放されているプランを選択状態にする
+    if (isPlanUnlocked('basic', userUnlockedPlans)) {
+      setRefundPlan('basic')
+    } else if (isPlanUnlocked('intermediate', userUnlockedPlans)) {
+      setRefundPlan('intermediate')
+    } else if (isPlanUnlocked('advanced', userUnlockedPlans)) {
+      setRefundPlan('advanced')
+    }
+
+    // 解放通知があるかチェック
+    if (profile.pending_unlock_notification) {
+      setShowUnlockNotification(profile.pending_unlock_notification)
+    }
+  }, [user, profile])
 
   useEffect(() => {
     if (!user) return
@@ -129,6 +164,7 @@ export default function OnboardingPage() {
     calculateParticipationFee()
   }, [snackPeriod, snackCount])
 
+
   const addCustomDietMethod = () => {
     if (customDietMethods.length < 5) {
       setCustomDietMethods([...customDietMethods, { name: '', selected: true }])
@@ -152,6 +188,18 @@ export default function OnboardingPage() {
     setCustomDietMethods(updated)
   }
 
+  // 解放通知を閉じる
+  const handleCloseUnlockNotification = async () => {
+    if (!user || !showUnlockNotification) return
+
+    try {
+      await clearUnlockNotification(user.id, supabase)
+      setShowUnlockNotification(null)
+    } catch (error) {
+      console.error('Failed to clear unlock notification:', error)
+    }
+  }
+
   const handleDietMethodToggle = (methodId: string) => {
     setSelectedDietMethods(prev => 
       prev.includes(methodId) 
@@ -160,7 +208,7 @@ export default function OnboardingPage() {
     )
   }
 
-  const handleComplete = async (paymentIntentId?: string) => {
+  const handleComplete = async () => {
     if (!user) return
 
     setLoading(true)
@@ -194,6 +242,8 @@ export default function OnboardingPage() {
           snack_frequency_period: snackPeriod,
           snack_frequency_count: parseInt(snackCount),
           record_time: recordTime,
+          // 新規ユーザーの場合は初期解放プランを設定
+          unlocked_plans: unlockedPlans || getInitialUnlockedPlans(),
         })
       throwIfError('profiles.upsert', profileError)
 
@@ -257,7 +307,6 @@ export default function OnboardingPage() {
           initial_weight: initialW,
           current_weight: initialW,
           target_weight: targetW,
-          payment_intent_id: paymentIntentId || null,
         })
         .select()
         .single()
@@ -381,21 +430,14 @@ export default function OnboardingPage() {
   const nextStep = () => {
     if (step < 4) {
       setStep(step + 1)
-    } else if (participationFee > 0) {
-      setShowPayment(true)
     } else {
       handleComplete()
     }
   }
 
-  const handlePaymentSuccess = (paymentIntentId?: string) => {
-    setShowPayment(false)
-    handleComplete(paymentIntentId)
-  }
 
-  const handlePaymentError = (error: string) => {
-    alert(`決済エラー: ${error}`)
-  }
+
+
 
   const prevStep = () => {
     if (step > 1) {
@@ -424,6 +466,31 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
       <div className="max-w-2xl mx-auto px-4">
+        {/* プラン解放通知 */}
+        {showUnlockNotification && (
+          <div className="mb-6 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="text-2xl">🎉</div>
+                <div>
+                  <h3 className="font-bold text-purple-900">
+                    {getUnlockNotificationMessage(showUnlockNotification)}
+                  </h3>
+                  <p className="text-sm text-purple-700">
+                    新しい難易度のチャレンジに挑戦できるようになりました！
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseUnlockNotification}
+                className="text-purple-500 hover:text-purple-700 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* プログレスバー */}
         <div className="mb-8">
           <div className="flex justify-between mb-2">
@@ -568,7 +635,10 @@ export default function OnboardingPage() {
                   {customDietMethods.length < 5 && (
                     <button
                       type="button"
-                      onClick={addCustomDietMethod}
+                      onClick={() => {
+                        playClickSound();
+                        addCustomDietMethod();
+                      }}
                       className="flex items-center space-x-2 text-purple-600 hover:text-purple-700"
                     >
                       <Plus className="w-4 h-4" />
@@ -595,41 +665,120 @@ export default function OnboardingPage() {
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-3">返金プランを選択</h3>
                   <div className="grid gap-3">
-                    {/* 初級（選択可能） */}
+                    {/* 初級プラン */}
                     <button
                       type="button"
-                      onClick={() => setRefundPlan('basic')}
+                      onClick={() => {
+                        if (isPlanUnlocked('basic', unlockedPlans)) {
+                          playClickSound();
+                          setRefundPlan('basic');
+                        }
+                      }}
+                      disabled={!isPlanUnlocked('basic', unlockedPlans)}
                       className={`flex items-center p-4 border-2 rounded-lg text-left transition-all w-full ${
-                        refundPlan === 'basic' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-300'
+                        !isPlanUnlocked('basic', unlockedPlans)
+                          ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
+                          : refundPlan === 'basic' 
+                            ? 'border-purple-500 bg-purple-50' 
+                            : 'border-gray-200 hover:border-purple-300'
                       }`}
                     >
-                      <div className="flex-1">
-                        <div className="font-semibold text-gray-900">初級</div>
-                        <div className="text-sm text-gray-600">記録成功日数に応じて返金</div>
+                      <div className="flex items-center space-x-3">
+                        {!isPlanUnlocked('basic', unlockedPlans) && (
+                          <Lock className="w-5 h-5 text-gray-400" />
+                        )}
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-900">
+                            {getPlanDisplayName('basic')}
+                            {isPlanUnlocked('basic', unlockedPlans) && '（おすすめ）'}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {isPlanUnlocked('basic', unlockedPlans) 
+                              ? '記録成功日数に応じて返金'
+                              : getUnlockConditionMessage('basic')
+                            }
+                          </div>
+                        </div>
                       </div>
                     </button>
 
-                    {/* 中級（未実装・無効） */}
-                    <div
-                      className="flex items-center p-4 border-2 rounded-lg text-left w-full border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed"
+                    {/* 中級プラン */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isPlanUnlocked('intermediate', unlockedPlans)) {
+                          playClickSound();
+                          setRefundPlan('intermediate');
+                        }
+                      }}
+                      disabled={!isPlanUnlocked('intermediate', unlockedPlans)}
+                      className={`flex items-center p-4 border-2 rounded-lg text-left transition-all w-full ${
+                        !isPlanUnlocked('intermediate', unlockedPlans)
+                          ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
+                          : refundPlan === 'intermediate' 
+                            ? 'border-purple-500 bg-purple-50' 
+                            : 'border-gray-200 hover:border-purple-300'
+                      }`}
                     >
-                      <Lock className="w-4 h-4 text-gray-400 mr-3" />
-                      <div className="flex-1">
-                        <div className="font-semibold text-gray-700">中級（近日対応）</div>
-                        <div className="text-sm text-gray-500">選択したダイエット法の達成状況を考慮（実装予定）</div>
+                      <div className="flex items-center space-x-3">
+                        {!isPlanUnlocked('intermediate', unlockedPlans) && (
+                          <Lock className="w-5 h-5 text-gray-400" />
+                        )}
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-900">
+                            {getPlanDisplayName('intermediate')}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {isPlanUnlocked('intermediate', unlockedPlans) 
+                              ? 'ダイエット成功日数（全ダイエット法達成日）に応じて返金'
+                              : getUnlockConditionMessage('intermediate')
+                            }
+                          </div>
+                          {isPlanUnlocked('intermediate', unlockedPlans) && (
+                            <div className="text-xs text-gray-500 mt-1">※ ダイエット成功日＝選択したダイエット法を全て達成した日数</div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </button>
 
-                    {/* 上級（未実装・無効） */}
-                    <div
-                      className="flex items-center p-4 border-2 rounded-lg text-left w-full border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed"
+                    {/* 上級プラン */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isPlanUnlocked('advanced', unlockedPlans)) {
+                          playClickSound();
+                          setRefundPlan('advanced');
+                        }
+                      }}
+                      disabled={!isPlanUnlocked('advanced', unlockedPlans)}
+                      className={`flex items-center p-4 border-2 rounded-lg text-left transition-all w-full ${
+                        !isPlanUnlocked('advanced', unlockedPlans)
+                          ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
+                          : refundPlan === 'advanced' 
+                            ? 'border-purple-500 bg-purple-50' 
+                            : 'border-gray-200 hover:border-purple-300'
+                      }`}
                     >
-                      <Lock className="w-4 h-4 text-gray-400 mr-3" />
-                      <div className="flex-1">
-                        <div className="font-semibold text-gray-700">上級（近日対応）</div>
-                        <div className="text-sm text-gray-500">1日でも未達成/未記録で返金なし（実装予定）</div>
+                      <div className="flex items-center space-x-3">
+                        {!isPlanUnlocked('advanced', unlockedPlans) && (
+                          <Lock className="w-5 h-5 text-gray-400" />
+                        )}
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-900">
+                            {getPlanDisplayName('advanced')}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {isPlanUnlocked('advanced', unlockedPlans) 
+                              ? '厳格ルール：毎日達成で満額返金、失敗で返金なし'
+                              : getUnlockConditionMessage('advanced')
+                            }
+                          </div>
+                          {isPlanUnlocked('advanced', unlockedPlans) && (
+                            <div className="text-xs text-gray-500 mt-1">※ 一度でも失敗または未記録で返金対象外</div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </button>
                   </div>
                 </div>
 
@@ -678,7 +827,7 @@ export default function OnboardingPage() {
                       ¥{participationFee.toLocaleString()}
                     </div>
                     <p className="text-sm text-gray-600">
-                      この金額をマネーモンスターが奪っています！
+                      この金額をマネーモンスターが奪っています！<br />（※実際の集金はありません）
                     </p>
                   </div>
                 </div>
@@ -697,7 +846,7 @@ export default function OnboardingPage() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    0円でも参加可能です
+                    実際の集金はありません。家族や友人に預かってもらってね！
                   </p>
                 </div>
               </div>
@@ -745,44 +894,29 @@ export default function OnboardingPage() {
           {/* ナビゲーションボタン */}
           <div className="flex justify-between mt-8">
             <button
-              onClick={prevStep}
+              onClick={() => {
+                playClickSound();
+                prevStep();
+              }}
               disabled={step === 1}
               className="px-6 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               戻る
             </button>
             <button
-              onClick={nextStep}
+              onClick={() => {
+                playClickSound();
+                nextStep();
+              }}
               disabled={!canProceed() || loading}
               className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? '設定中...' : step === 4 ? (participationFee > 0 ? '決済へ進む' : 'チャレンジ開始!') : '次へ'}
+              {loading ? '設定中...' : step === 4 ? 'チャレンジ開始!' : '次へ'}
             </button>
           </div>
         </div>
 
-        {/* 決済モーダル */}
-        {showPayment && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900">参加費のお支払い</h3>
-                <button
-                  onClick={() => setShowPayment(false)}
-                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
 
-              <StripePayment
-                amount={participationFee}
-                onSuccess={handlePaymentSuccess}
-                onError={handlePaymentError}
-              />
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { Challenge, DailyRecord } from '@/types'
 import { Weight, Target, MessageCircle, CheckCircle, ArrowLeft, Save } from 'lucide-react'
 import Link from 'next/link'
-import { getJstYmd, formatYmdToJa } from '@/lib/utils'
+import { getJstYmd, formatYmdToJa, calculateRefund, calculateDietSuccessDays, hasAnyDietFailure } from '@/lib/utils'
 
 interface DietMethodOption {
   id: string
@@ -310,7 +310,30 @@ export default function RecordPage() {
 
       const recordedDaysCount = (totalRecords?.length || 0) + (existingRecord ? 0 : 1)
       const achievementRate = (recordedDaysCount / 30) * 100
-      const refundAmount = Math.floor((challenge.participation_fee * recordedDaysCount) / 30)
+
+      // プラン別の返金計算
+      let refundAmount = 0
+      switch (challenge.refund_plan) {
+        case 'basic':
+          // 初級：記録成功日数ベース
+          refundAmount = calculateRefund(challenge.participation_fee, 'basic', recordedDaysCount, 0, false)
+          break
+        
+        case 'intermediate':
+          // 中級：ダイエット成功日数ベース
+          const dietSuccessDays = await calculateDietSuccessDays(challenge.id, supabase)
+          refundAmount = calculateRefund(challenge.participation_fee, 'intermediate', recordedDaysCount, dietSuccessDays, false)
+          break
+        
+        case 'advanced':
+          // 上級：失敗があれば0円、全て成功なら満額
+          const hasFailure = await hasAnyDietFailure(challenge.id, supabase)
+          refundAmount = calculateRefund(challenge.participation_fee, 'advanced', recordedDaysCount, 0, hasFailure)
+          break
+        
+        default:
+          refundAmount = calculateRefund(challenge.participation_fee, 'basic', recordedDaysCount, 0, false)
+      }
 
       // 現在の体重も更新
       const updateData: Partial<Challenge> = {
@@ -330,11 +353,41 @@ export default function RecordPage() {
 
       if (challengeUpdateError) throw challengeUpdateError
 
-      // 成功メッセージの表示
+      // プラン別の成功メッセージの表示
       const allSuccessful = Object.values(dietResults).every(result => result === true)
-      const successMessage = allSuccessful
-        ? '素晴らしい！今日はダイエット大成功です。明日も頑張ってください！'
-        : '今日は目標を達成できませんでしたが、勇気を出して記録したことが重要です！記録を続けることこそが、成功への道筋です。明日も記録を続けましょう！'
+      let successMessage = ''
+      
+      switch (challenge.refund_plan) {
+        case 'basic':
+          successMessage = allSuccessful
+            ? '素晴らしい！今日はダイエット大成功です。明日も頑張ってください！'
+            : '今日は目標を達成できませんでしたが、勇気を出して記録したことが重要です！記録を続けることこそが、成功への道筋です。明日も記録を続けましょう！'
+          break
+        
+        case 'intermediate':
+          successMessage = allSuccessful
+            ? '素晴らしい！今日はダイエット大成功です（ダイエット成功日として記録）。明日も頑張ってください！'
+            : '今日は一部のダイエット法で目標を達成できませんでしたが、記録することが重要です。中級プランでは全ダイエット法を達成した日のみが返金対象となります。明日は全て達成を目指しましょう！'
+          break
+        
+        case 'advanced':
+          if (allSuccessful) {
+            successMessage = '素晴らしい！今日もダイエット大成功です。上級プランでは毎日の達成が重要です。この調子で30日間頑張り続けましょう！'
+          } else {
+            const hasFailure = await hasAnyDietFailure(challenge.id, supabase)
+            if (hasFailure) {
+              successMessage = '上級プランでは一度でも失敗があると返金対象外となります。今回の失敗により、残念ながら返金はできませんが、健康のためにチャレンジを続けることをお勧めします。'
+            } else {
+              successMessage = '今日は目標を達成できませんでした。上級プランでは一度でも失敗があると返金対象外となりますので、明日からより一層気をつけて取り組みましょう！'
+            }
+          }
+          break
+        
+        default:
+          successMessage = allSuccessful
+            ? '素晴らしい！今日はダイエット大成功です。明日も頑張ってください！'
+            : '今日は目標を達成できませんでしたが、勇気を出して記録したことが重要です！記録を続けることこそが、成功への道筋です。明日も記録を続けましょう！'
+      }
 
       alert(successMessage)
       router.push('/dashboard')
