@@ -3,6 +3,13 @@
 import { useState, useEffect } from 'react'
 import { X, Cookie } from 'lucide-react'
 
+// Google Analytics gtag関数の型定義
+declare global {
+  interface Window {
+    gtag?: (...args: unknown[]) => void;
+  }
+}
+
 export default function CookieBanner() {
   const [showBanner, setShowBanner] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -21,7 +28,7 @@ export default function CookieBanner() {
     
     // Google Analyticsを有効化
     if (process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && typeof window !== 'undefined') {
-      ;(window as any).gtag('consent', 'update', {
+      window.gtag?.('consent', 'update', {
         analytics_storage: 'granted'
       })
     }
@@ -33,7 +40,7 @@ export default function CookieBanner() {
     
     // Google Analyticsを無効化
     if (process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && typeof window !== 'undefined') {
-      ;(window as any).gtag('consent', 'update', {
+      window.gtag?.('consent', 'update', {
         analytics_storage: 'denied'
       })
     }

@@ -28,10 +28,17 @@ export default function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps)
   )
 }
 
+// Google Analytics gtag関数の型定義
+declare global {
+  interface Window {
+    gtag?: (...args: unknown[]) => void;
+  }
+}
+
 // カスタムイベント送信用のユーティリティ関数
-export const gtag = (...args: any[]) => {
-  if (typeof window !== 'undefined' && (window as any).gtag) {
-    ;(window as any).gtag(...args)
+export const gtag = (...args: unknown[]) => {
+  if (typeof window !== 'undefined' && window.gtag) {
+    window.gtag(...args)
   }
 }
 
