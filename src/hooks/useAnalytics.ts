@@ -38,7 +38,7 @@ export function useVisibilityTracking() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         // ページを離れる時のイベント
-        if (navigator.sendBeacon) {
+        if ('sendBeacon' in navigator) {
           trackDietChallengeEvent.engagedSession('page_exit')
         }
       }
