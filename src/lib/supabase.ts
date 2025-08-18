@@ -24,33 +24,93 @@ if (!supabaseUrl || !supabaseAnonKey) {
   )
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    // リフレッシュトークンの自動更新を有効化
+    autoRefreshToken: true,
+    // 永続化されたセッションを復元
+    persistSession: true,
+    // セッションの有効期限を設定（デフォルト: 1時間）
+    detectSessionInUrl: true,
+    // エラーハンドリングを改善
+    flowType: 'pkce',
+  },
+  // グローバルヘッダーを設定
+  global: {
+    headers: {
+      'X-Client-Info': 'diet-app',
+    },
+  },
+})
 
 // 認証関連のヘルパー関数
 export const auth = {
   signUp: async (email: string, password: string) => {
-    return await supabase.auth.signUp({
-      email,
-      password,
-    })
+    try {
+      return await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+    } catch (error) {
+      console.error('サインアップエラー:', error)
+      throw error
+    }
   },
 
   signIn: async (email: string, password: string) => {
-    return await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      return await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+    } catch (error) {
+      console.error('サインインエラー:', error)
+      throw error
+    }
   },
 
   signOut: async () => {
-    return await supabase.auth.signOut()
+    try {
+      return await supabase.auth.signOut()
+    } catch (error) {
+      console.error('サインアウトエラー:', error)
+      throw error
+    }
   },
 
   getUser: async () => {
-    return await supabase.auth.getUser()
+    try {
+      return await supabase.auth.getUser()
+    } catch (error) {
+      console.error('ユーザー取得エラー:', error)
+      throw error
+    }
   },
 
   getSession: async () => {
-    return await supabase.auth.getSession()
-  }
+    try {
+      return await supabase.auth.getSession()
+    } catch (error) {
+      console.error('セッション取得エラー:', error)
+      throw error
+    }
+  },
+
+  // リフレッシュトークンの状態を確認
+  checkSession: async () => {
+    try {
+      const { data, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('セッション確認エラー:', error)
+        return { valid: false, error }
+      }
+      return { valid: !!data.session, session: data.session }
+    } catch (error) {
+      console.error('セッション確認エラー:', error)
+      return { valid: false, error }
+    }
+  },
 }

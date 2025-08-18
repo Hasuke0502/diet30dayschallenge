@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { auth } from '@/lib/supabase'
+import { getAuthErrorMessage } from '@/lib/utils'
 import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react'
 import { useAnalyticsEvents } from '@/hooks/useAnalytics'
 
@@ -63,7 +64,10 @@ export default function AuthForm({ mode }: AuthFormProps) {
     } catch (error: unknown) {
       console.error('認証エラー:', error)
       clearTimeout(timeoutId)
-      setError(error instanceof Error ? error.message : 'エラーが発生しました')
+      
+      // エラーメッセージを日本語化
+      const errorMessage = getAuthErrorMessage(error)
+      setError(errorMessage)
     } finally {
       clearTimeout(timeoutId)
       // エラーが発生した場合のみローディング状態を解除

@@ -6,6 +6,51 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// 認証エラーメッセージを日本語化する関数
+export function getAuthErrorMessage(error: Error | string): string {
+  const message = typeof error === 'string' ? error : error.message
+  
+  if (message.includes('Invalid Refresh Token') || message.includes('Refresh Token Not Found')) {
+    return '認証セッションが無効です。再度ログインしてください。'
+  } else if (message.includes('Invalid login credentials')) {
+    return 'メールアドレスまたはパスワードが正しくありません。'
+  } else if (message.includes('Email not confirmed')) {
+    return 'メールアドレスの確認が完了していません。確認メールをご確認ください。'
+  } else if (message.includes('User already registered')) {
+    return 'このメールアドレスは既に登録されています。'
+  } else if (message.includes('Password should be at least 6 characters')) {
+    return 'パスワードは6文字以上で入力してください。'
+  } else if (message.includes('Unable to validate email address')) {
+    return '有効なメールアドレスを入力してください。'
+  } else if (message.includes('Too many requests')) {
+    return 'リクエストが多すぎます。しばらく時間をおいてから再試行してください。'
+  } else if (message.includes('Network error') || message.includes('Failed to fetch')) {
+    return 'ネットワークエラーが発生しました。インターネット接続を確認してください。'
+  } else if (message.includes('Request timeout')) {
+    return 'リクエストがタイムアウトしました。しばらく時間をおいてから再試行してください。'
+  }
+  
+  return message
+}
+
+// リフレッシュトークンエラーかどうかを判定する関数
+export function isRefreshTokenError(error: Error | string): boolean {
+  const message = typeof error === 'string' ? error : error.message
+  return message.includes('Invalid Refresh Token') || message.includes('Refresh Token Not Found')
+}
+
+// 認証エラーかどうかを判定する関数
+export function isAuthError(error: Error | string): boolean {
+  const message = typeof error === 'string' ? error : error.message
+  return message.includes('Invalid login credentials') || 
+         message.includes('Email not confirmed') ||
+         message.includes('User already registered') ||
+         message.includes('Password should be at least 6 characters') ||
+         message.includes('Unable to validate email address') ||
+         message.includes('Too many requests') ||
+         isRefreshTokenError(error)
+}
+
 // 返金額計算：プラン別の計算ロジック
 export function calculateRefund(
   participationFee: number, 

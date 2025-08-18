@@ -39,8 +39,9 @@ export const metadata: Metadata = {
     description: "マネーモンスターを倒してお金と健康を取り戻そう！",
   },
   verification: {
-    // 将来的にGoogle Search Console、Bingウェブマスターツールの認証が必要な場合
-    // google: 'your-google-verification-code',
+    // Google Search Consoleの認証コード
+    google: 'google3c6060e22735228f',
+    // 将来的にBingウェブマスターツールの認証が必要な場合
     // other: 'your-other-verification-code',
   },
 };

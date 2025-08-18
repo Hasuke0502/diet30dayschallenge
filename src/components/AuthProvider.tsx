@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { User } from '@supabase/supabase-js'
 import { Profile } from '@/types'
+import { isRefreshTokenError } from '@/lib/utils'
 
 interface AuthContextType {
   user: User | null
@@ -66,11 +67,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // セッションをクリアして再認証を促す
+  const clearSessionAndRedirect = async () => {
+    try {
+      console.log('セッションをクリアして再認証を促します')
+      await supabase.auth.signOut()
+      setUser(null)
+      setProfile(null)
+      lastFetchedUserIdRef.current = null
+      previousUserRef.current = null
+      
+      // ログインページにリダイレクト
+      if (typeof window !== 'undefined') {
+        window.location.href = '/auth/signin'
+      }
+    } catch (error) {
+      console.error('セッションクリアエラー:', error)
+    }
+  }
+
   useEffect(() => {
     // 初期セッション取得
     const getInitialSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        // リフレッシュトークンエラーが発生した場合
+        if (error) {
+          console.error('初期セッション取得エラー:', error)
+          if (isRefreshTokenError(error.message)) {
+            await clearSessionAndRedirect()
+            return
+          }
+        }
+        
         const currentUserId = session?.user?.id || null
         
         // ユーザーIDが変更された場合のみ状態を更新
@@ -87,6 +117,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error('初期セッション取得エラー:', error)
+        // リフレッシュトークン関連のエラーの場合
+        if (error instanceof Error && isRefreshTokenError(error.message)) {
+          await clearSessionAndRedirect()
+          return
+        }
       } finally {
         setLoading(false)
         setIsInitializing(false)
@@ -136,6 +171,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsTransitioning(true)
     try {
       await supabase.auth.signOut()
+    } catch (error) {
+      console.error('サインアウトエラー:', error)
+      // エラーが発生しても状態をリセット
+      setUser(null)
+      setProfile(null)
+      lastFetchedUserIdRef.current = null
+      previousUserRef.current = null
     } finally {
       // サインアウト後、少し遅延を入れてから状態をリセット
       setTimeout(() => {
