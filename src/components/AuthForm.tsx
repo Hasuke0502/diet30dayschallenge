@@ -66,7 +66,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
       clearTimeout(timeoutId)
       
       // エラーメッセージを日本語化
-      const errorMessage = getAuthErrorMessage(error)
+      const errorMessage = getAuthErrorMessage(error instanceof Error ? error : String(error))
       setError(errorMessage)
     } finally {
       clearTimeout(timeoutId)

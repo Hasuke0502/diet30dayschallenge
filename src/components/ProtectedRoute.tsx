@@ -46,7 +46,7 @@ export default function ProtectedRoute({
   useEffect(() => {
     const checkAuthStatus = async () => {
       try {
-        const { data, error } = await supabase.auth.getSession()
+        const { error } = await supabase.auth.getSession()
         if (error) {
           console.error('認証状態確認エラー:', error)
           if (isRefreshTokenError(error.message)) {
