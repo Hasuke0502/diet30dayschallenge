@@ -703,7 +703,7 @@ export default function OnboardingPage() {
               <div className="space-y-6">
                 {/* 返金プラン選択 */}
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-3">返金プランを選択</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-3">レベルを選択</h3>
                   <div className="grid gap-3">
                     {/* 初級プラン */}
                     <button
@@ -734,7 +734,7 @@ export default function OnboardingPage() {
                           </div>
                           <div className="text-sm text-gray-600">
                             {isPlanUnlocked('basic', unlockedPlans) 
-                              ? '記録成功日数に応じて返金'
+                              ? '記録さえできればOK'
                               : getUnlockConditionMessage('basic')
                             }
                           </div>
