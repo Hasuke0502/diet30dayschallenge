@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { Challenge, DailyRecord, MoneyMonsterData } from '@/types'
 import { Skull, Calendar, TrendingDown, Target, Settings, LogOut, Plus } from 'lucide-react'
 import Link from 'next/link'
-import { getJstYmd, isAfterYmd, formatYmdToJa, addDaysToYmd, calculateRefund, calculateDietSuccessDays, hasAnyDietFailure, unlockNextPlan } from '@/lib/utils'
+import { getJstYmd, isAfterYmd, formatYmdToJa, addDaysToYmd, calculateRefund, calculateDietSuccessDays, hasAnyDietFailure, unlockNextPlan, checkAdvancedPlanUnrecordedGameOver } from '@/lib/utils'
 import { useSound } from '@/hooks/useSound'
 
 export default function DashboardPage() {
@@ -102,7 +102,20 @@ export default function DashboardPage() {
         // ゲーム完了チェック（JST基準のYYYY-MM-DD）
         const endYmd = challengeData.end_date
         const todayYmd = getJstYmd()
-        const gameCompleted = isAfterYmd(todayYmd, endYmd) || recordedDays >= 30 || challengeData.status === 'completed'
+        
+        // 上級プランでの未記録時のゲームオーバー処理
+        let gameCompleted = false
+        if (challengeData.refund_plan === 'advanced') {
+          const isUnrecordedGameOver = await checkAdvancedPlanUnrecordedGameOver(challengeData.id, supabase)
+          if (isUnrecordedGameOver) {
+            gameCompleted = true
+          }
+        }
+        
+        // 通常のゲーム完了条件
+        if (!gameCompleted) {
+          gameCompleted = isAfterYmd(todayYmd, endYmd) || recordedDays >= 30 || challengeData.status === 'completed'
+        }
 
         if (gameCompleted && challengeData.status !== 'completed') {
           // チャレンジを完了状態に更新
@@ -116,7 +129,6 @@ export default function DashboardPage() {
             const newUnlockedPlan = await unlockNextPlan(
               user.id,
               challengeData.refund_plan,
-              recordedDays,
               supabase
             )
             setUnlockedPlan(newUnlockedPlan)

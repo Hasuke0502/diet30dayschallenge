@@ -90,6 +90,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 初期セッション取得
     const getInitialSession = async () => {
       try {
+        // ローカルストレージからセッション情報を確認
+        const storedSession = localStorage.getItem('diet-app-auth-token')
+        if (storedSession) {
+          console.log('ローカルストレージからセッション情報を復元中...')
+        }
+
         const { data: { session }, error } = await supabase.auth.getSession()
         
         // リフレッシュトークンエラーが発生した場合
@@ -109,6 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           previousUserRef.current = currentUserId
           
           if (session?.user) {
+            console.log('セッション復元成功:', session.user.email)
             const profileData = await fetchProfile(session.user.id)
             setProfile(profileData)
           } else {
@@ -129,6 +136,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     getInitialSession()
+
+    // セッションの自動更新（1時間ごと）
+    const sessionRefreshInterval = setInterval(async () => {
+      if (user) {
+        try {
+          const { data, error } = await supabase.auth.refreshSession()
+          if (error) {
+            console.error('セッション自動更新エラー:', error)
+            if (isRefreshTokenError(error.message)) {
+              await clearSessionAndRedirect()
+            }
+          } else if (data.session) {
+            console.log('セッション自動更新成功')
+          }
+        } catch (error) {
+          console.error('セッション自動更新エラー:', error)
+        }
+      }
+    }, 60 * 60 * 1000) // 1時間ごと
 
     // 認証状態変更のリスナー
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -163,8 +189,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     )
 
-    return () => subscription.unsubscribe()
-  }, [profile])
+    return () => {
+      subscription.unsubscribe()
+      clearInterval(sessionRefreshInterval)
+    }
+  }, [user, profile])
 
   const signOut = async () => {
     isTransitioningRef.current = true

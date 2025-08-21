@@ -225,17 +225,86 @@ export function formatYmdToJa(ymd: string, withWeekday = false): string {
 // プランの難易度順序
 export const PLAN_ORDER: ('basic' | 'intermediate' | 'advanced')[] = ['basic', 'intermediate', 'advanced']
 
-// プラン名の日本語表示
+/**
+ * プラン解放の判定と処理を行う
+ * @param currentPlan 現在完了したプラン
+ * @param unlockedPlans 既に解放済みのプラン配列
+ * @returns 解放されるプランと更新後の解放済みプラン配列
+ */
+export function determinePlanUnlock(
+  currentPlan: 'basic' | 'intermediate' | 'advanced',
+  unlockedPlans: ('basic' | 'intermediate' | 'advanced')[] = []
+): {
+  newlyUnlockedPlan: ('intermediate' | 'advanced') | null;
+  updatedUnlockedPlans: ('basic' | 'intermediate' | 'advanced')[];
+} {
+  // 既に解放済みのプランを確認
+  const isBasicUnlocked = unlockedPlans.includes('basic');
+  const isIntermediateUnlocked = unlockedPlans.includes('intermediate');
+  const isAdvancedUnlocked = unlockedPlans.includes('advanced');
+
+  let newlyUnlockedPlan: ('intermediate' | 'advanced') | null = null;
+  const updatedUnlockedPlans = [...unlockedPlans];
+
+  // 初級プラン完了時
+  if (currentPlan === 'basic' && !isIntermediateUnlocked) {
+    newlyUnlockedPlan = 'intermediate';
+    if (!isBasicUnlocked) {
+      updatedUnlockedPlans.push('basic');
+    }
+    updatedUnlockedPlans.push('intermediate');
+  }
+  // 中級プラン完了時
+  else if (currentPlan === 'intermediate' && !isAdvancedUnlocked) {
+    newlyUnlockedPlan = 'advanced';
+    if (!isBasicUnlocked) {
+      updatedUnlockedPlans.push('basic');
+    }
+    if (!isIntermediateUnlocked) {
+      updatedUnlockedPlans.push('intermediate');
+    }
+    updatedUnlockedPlans.push('advanced');
+  }
+
+  return {
+    newlyUnlockedPlan,
+    updatedUnlockedPlans: [...new Set(updatedUnlockedPlans)] // 重複を除去
+  };
+}
+
+/**
+ * プラン名を日本語で取得
+ * @param plan プラン名
+ * @returns 日本語のプラン名
+ */
 export function getPlanDisplayName(plan: 'basic' | 'intermediate' | 'advanced'): string {
   switch (plan) {
     case 'basic':
-      return '初級'
+      return '初級プラン';
     case 'intermediate':
-      return '中級'
+      return '中級プラン';
     case 'advanced':
-      return '上級'
+      return '上級プラン';
     default:
-      return '不明'
+      return '不明なプラン';
+  }
+}
+
+/**
+ * プランの解放条件を取得
+ * @param plan プラン名
+ * @returns 解放条件の説明
+ */
+export function getPlanUnlockCondition(plan: 'basic' | 'intermediate' | 'advanced'): string {
+  switch (plan) {
+    case 'basic':
+      return 'すべてのユーザーが選択可能';
+    case 'intermediate':
+      return '初級プランのクリアが必要です';
+    case 'advanced':
+      return '中級プランのクリアが必要です';
+    default:
+      return '不明な条件';
   }
 }
 
@@ -288,14 +357,9 @@ export function getUnlockConditionMessage(plan: 'basic' | 'intermediate' | 'adva
 export async function unlockNextPlan(
   userId: string,
   completedPlan: 'basic' | 'intermediate' | 'advanced',
-  recordedDaysCount: number,
   supabase: SupabaseClient
 ): Promise<'basic' | 'intermediate' | 'advanced' | null> {
   try {
-    // 30日間の記録が達成されていない場合は解放しない
-    if (recordedDaysCount < 30) {
-      return null
-    }
 
     // 次のプランを取得
     const nextPlan = getNextPlanToUnlock(completedPlan)
@@ -358,4 +422,303 @@ export async function clearUnlockNotification(userId: string, supabase: Supabase
 export function getUnlockNotificationMessage(plan: 'basic' | 'intermediate' | 'advanced'): string {
   const planName = getPlanDisplayName(plan)
   return `🎉 おめでとうございます！${planName}プランが解放されました！`
+}
+
+/**
+ * 上級プランでの失敗時の即座ゲームオーバー処理
+ * @param challengeId チャレンジID
+ * @param supabase Supabaseクライアント
+ * @returns ゲームオーバーが発生したかどうか
+ */
+export async function checkAdvancedPlanGameOver(
+  challengeId: string,
+  supabase: SupabaseClient
+): Promise<boolean> {
+  try {
+    // 上級プランでの失敗の有無をチェック
+    const hasFailure = await hasAnyDietFailure(challengeId, supabase)
+    
+    if (hasFailure) {
+      // 失敗がある場合、チャレンジを完了状態に更新
+      const { error } = await supabase
+        .from('challenges')
+        .update({ 
+          status: 'completed',
+          refund_amount: 0 // 失敗により返金対象外
+        })
+        .eq('id', challengeId)
+      
+      if (error) throw error
+      return true // ゲームオーバー
+    }
+    
+    return false // ゲームオーバーではない
+  } catch (error) {
+    console.error('Error checking advanced plan game over:', error)
+    return false
+  }
+}
+
+/**
+ * 上級プランでの未記録時の即座ゲームオーバー処理
+ * @param challengeId チャレンジID
+ * @param supabase Supabaseクライアント
+ * @returns ゲームオーバーが発生したかどうか
+ */
+export async function checkAdvancedPlanUnrecordedGameOver(
+  challengeId: string,
+  supabase: SupabaseClient
+): Promise<boolean> {
+  try {
+    // チャレンジの開始日を取得
+    const { data: challenge, error: challengeError } = await supabase
+      .from('challenges')
+      .select('start_date')
+      .eq('id', challengeId)
+      .single()
+    
+    if (challengeError) throw challengeError
+    
+    const startDate = challenge.start_date
+    const today = getJstYmd()
+    
+    // 開始日から今日までの日数を計算
+    const start = new Date(startDate)
+    const end = new Date(today)
+    const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+    
+    // 今日が開始日から2日目以降の場合、前日の記録をチェック
+    if (daysDiff >= 2) {
+      const yesterday = addDaysToYmd(today, -1)
+      
+      // 前日の記録があるかチェック
+      const { error: recordError } = await supabase
+        .from('daily_records')
+        .select('id')
+        .eq('challenge_id', challengeId)
+        .eq('record_date', yesterday)
+        .single()
+      
+      if (recordError && recordError.code === 'PGRST116') {
+        // 前日の記録がない場合、ゲームオーバー
+        const { error: updateError } = await supabase
+          .from('challenges')
+          .update({ 
+            status: 'completed',
+            refund_amount: 0 // 未記録により返金対象外
+          })
+          .eq('id', challengeId)
+        
+        if (updateError) throw updateError
+        return true // ゲームオーバー
+      }
+    }
+    
+    return false // ゲームオーバーではない
+  } catch (error) {
+    console.error('Error checking advanced plan unrecorded game over:', error)
+    return false
+  }
+}
+
+// 自動ログインの状態を確認
+export const checkAutoLoginStatus = () => {
+  if (typeof window === 'undefined') return false
+  
+  const token = localStorage.getItem('diet-app-auth-token')
+  if (!token) return false
+  
+  try {
+    const parsed = JSON.parse(token)
+    const expiresAt = parsed.expires_at * 1000 // 秒からミリ秒に変換
+    const now = Date.now()
+    
+    // 有効期限が切れていないかチェック
+    if (expiresAt > now) {
+      return true
+    } else {
+      // 期限切れのトークンを削除
+      localStorage.removeItem('diet-app-auth-token')
+      return false
+    }
+  } catch {
+    // 不正なトークンの場合は削除
+    localStorage.removeItem('diet-app-auth-token')
+    return false
+  }
+}
+
+// セッションの残り時間を取得（分単位）
+export const getSessionTimeRemaining = () => {
+  if (typeof window === 'undefined') return 0
+  
+  const token = localStorage.getItem('diet-app-auth-token')
+  if (!token) return 0
+  
+  try {
+    const parsed = JSON.parse(token)
+    const expiresAt = parsed.expires_at * 1000
+    const now = Date.now()
+    const remaining = expiresAt - now
+    
+    if (remaining > 0) {
+      return Math.floor(remaining / (1000 * 60)) // 分単位で返す
+    }
+    return 0
+  } catch {
+    return 0
+  }
+}
+
+// ===== ダイエット法設定管理 =====
+
+/**
+ * 現在のアクティブチャレンジから選択されているダイエット法を取得
+ * @param userId ユーザーID
+ * @param supabase Supabaseクライアント
+ * @returns 選択されているダイエット法の情報
+ */
+export async function getCurrentDietMethods(userId: string, supabase: SupabaseClient) {
+  try {
+    // アクティブなチャレンジを取得
+    const { data: challenge, error: challengeError } = await supabase
+      .from('challenges')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .single()
+
+    if (challengeError || !challenge) {
+      return {
+        defaultMethods: [],
+        customMethods: []
+      }
+    }
+
+    // チャレンジに紐づくダイエット法を取得
+    const { data: challengeDietMethods, error: methodsError } = await supabase
+      .from('challenge_diet_methods')
+      .select(`
+        id,
+        diet_methods (
+          id,
+          name,
+          description,
+          question_text
+        ),
+        custom_diet_methods (
+          id,
+          name,
+          question_text
+        )
+      `)
+      .eq('challenge_id', challenge.id)
+
+    if (methodsError) throw methodsError
+
+    const defaultMethods = challengeDietMethods
+      ?.filter(item => item.diet_methods)
+      .map(item => item.diet_methods)
+      .filter(Boolean) || []
+
+    const customMethods = challengeDietMethods
+      ?.filter(item => item.custom_diet_methods)
+      .map(item => item.custom_diet_methods)
+      .filter(Boolean) || []
+
+    return {
+      defaultMethods,
+      customMethods
+    }
+  } catch (error) {
+    console.error('Error getting current diet methods:', error)
+    return {
+      defaultMethods: [],
+      customMethods: []
+    }
+  }
+}
+
+/**
+ * ユーザーの好みのダイエット法設定を保存
+ * @param userId ユーザーID
+ * @param selectedDefaultMethods 選択されたデフォルトダイエット法のIDリスト
+ * @param selectedCustomMethods 選択されたカスタムダイエット法の名前リスト
+ * @param supabase Supabaseクライアント
+ */
+export async function savePreferredDietMethods(
+  userId: string,
+  selectedDefaultMethods: string[],
+  selectedCustomMethods: string[],
+  supabase: SupabaseClient
+): Promise<void> {
+  try {
+    console.log('Saving preferred diet methods:', {
+      userId,
+      selectedDefaultMethods,
+      selectedCustomMethods
+    })
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        preferred_diet_methods: selectedDefaultMethods,
+        preferred_custom_diet_methods: selectedCustomMethods
+      })
+      .eq('id', userId)
+
+    if (error) {
+      console.error('Supabase error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
+      throw error
+    }
+
+    console.log('Successfully saved preferred diet methods')
+  } catch (error) {
+    console.error('Error saving preferred diet methods:', {
+      error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    throw error
+  }
+}
+
+/**
+ * ユーザーの好みのダイエット法設定を取得
+ * @param userId ユーザーID
+ * @param supabase Supabaseクライアント
+ * @returns 保存されているダイエット法の設定
+ */
+export async function getPreferredDietMethods(
+  userId: string,
+  supabase: SupabaseClient
+): Promise<{
+  defaultMethods: string[]
+  customMethods: string[]
+}> {
+  try {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('preferred_diet_methods, preferred_custom_diet_methods')
+      .eq('id', userId)
+      .single()
+
+    if (error) throw error
+
+    return {
+      defaultMethods: profile?.preferred_diet_methods || [],
+      customMethods: profile?.preferred_custom_diet_methods || []
+    }
+  } catch (error) {
+    console.error('Error getting preferred diet methods:', error)
+    return {
+      defaultMethods: [],
+      customMethods: []
+    }
+  }
 }

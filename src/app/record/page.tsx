@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { Challenge, DailyRecord } from '@/types'
 import { Weight, Target, MessageCircle, CheckCircle, ArrowLeft, Save } from 'lucide-react'
 import Link from 'next/link'
-import { getJstYmd, formatYmdToJa, calculateRefund, calculateDietSuccessDays, hasAnyDietFailure } from '@/lib/utils'
+import { getJstYmd, formatYmdToJa, calculateRefund, calculateDietSuccessDays, hasAnyDietFailure, checkAdvancedPlanGameOver } from '@/lib/utils'
 
 interface DietMethodOption {
   id: string
@@ -374,9 +374,14 @@ export default function RecordPage() {
           if (allSuccessful) {
             successMessage = '素晴らしい！今日もダイエット大成功です。上級プランでは毎日の達成が重要です。この調子で30日間頑張り続けましょう！'
           } else {
-            const hasFailure = await hasAnyDietFailure(challenge.id, supabase)
-            if (hasFailure) {
-              successMessage = '上級プランでは一度でも失敗があると返金対象外となります。今回の失敗により、残念ながら返金はできませんが、健康のためにチャレンジを続けることをお勧めします。'
+            // 上級プランでの失敗時は即座にゲームオーバー
+            const isGameOver = await checkAdvancedPlanGameOver(challenge.id, supabase)
+            if (isGameOver) {
+              successMessage = 'ゲームオーバー！上級プランでは一度の失敗も許されません。チャレンジは終了です。'
+              // ゲームオーバーの場合はダッシュボードにリダイレクト（ゲーム完了ポップアップが表示される）
+              alert(successMessage)
+              router.push('/dashboard')
+              return
             } else {
               successMessage = '今日は目標を達成できませんでした。上級プランでは一度でも失敗があると返金対象外となりますので、明日からより一層気をつけて取り組みましょう！'
             }

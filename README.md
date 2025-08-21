@@ -74,6 +74,8 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
 STRIPE_SECRET_KEY=your_stripe_secret_key
 
+
+
 # Google Analytics（アナリティクス機能を使う場合）
 NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
 ```
@@ -110,8 +112,7 @@ npm run dev
 
 ## API エンドポイント
 
-### `/api/contact`
-- **POST**: お問い合わせフォーム送信
+
 
 ### `/api/stripe/create-payment-intent`
 - **POST**: Stripe決済インテント作成

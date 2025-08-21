@@ -1,78 +1,51 @@
-import { useCallback, useRef, useState, useEffect } from 'react';
+import { useCallback, useRef } from 'react';
 
 export const useSound = () => {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [isSoundEnabled, setIsSoundEnabled] = useState(true);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
-  // ローカルストレージから音声設定を読み込み
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedSetting = localStorage.getItem('soundEnabled');
-      if (savedSetting !== null) {
-        setIsSoundEnabled(savedSetting === 'true');
+  // Web Audio APIを使ってビープ音を生成
+  const playBeepSound = useCallback((frequency: number = 800, duration: number = 150, volume: number = 0.1) => {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)();
       }
+      
+      const audioContext = audioContextRef.current;
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+      oscillator.type = 'square';
+      
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(volume, audioContext.currentTime + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration / 1000);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + duration / 1000);
+      
+      console.log(`🎵 ビープ音再生: ${frequency}Hz, ${duration}ms`);
+    } catch (error) {
+      console.error('❌ ビープ音生成エラー:', error);
     }
   }, []);
 
-  // 音声設定を保存
-  const toggleSound = useCallback(() => {
-    const newSetting = !isSoundEnabled;
-    setIsSoundEnabled(newSetting);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('soundEnabled', newSetting.toString());
-    }
-  }, [isSoundEnabled]);
-
   const playClickSound = useCallback(() => {
-    if (!isSoundEnabled) return;
-    
-    try {
-      // 音声ファイルが存在する場合のみ再生
-      if (typeof window !== 'undefined') {
-        if (!audioRef.current) {
-          audioRef.current = new Audio('/sounds/click.mp3');
-          audioRef.current.volume = 0.3; // 音量を30%に設定
-          audioRef.current.preload = 'auto';
-        }
-        
-        // 音声を再生
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch((error) => {
-          console.log('音声再生に失敗しました:', error);
-        });
-      }
-    } catch (error) {
-      console.log('音声再生エラー:', error);
-    }
-  }, [isSoundEnabled]);
+    playBeepSound(800, 150, 0.1);
+  }, [playBeepSound]);
 
   const playSuccessSound = useCallback(() => {
-    if (!isSoundEnabled) return;
-    
-    try {
-      if (typeof window !== 'undefined') {
-        if (!audioRef.current) {
-          audioRef.current = new Audio('/sounds/click.mp3');
-          audioRef.current.volume = 0.4;
-          audioRef.current.preload = 'auto';
-        }
-        
-        // 成功音として少し高めの音量で再生
-        audioRef.current.volume = 0.4;
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch((error) => {
-          console.log('成功音再生に失敗しました:', error);
-        });
-      }
-    } catch (error) {
-      console.log('成功音再生エラー:', error);
-    }
-  }, [isSoundEnabled]);
+    // 成功音として少し高い音で再生
+    playBeepSound(1000, 200, 0.15);
+  }, [playBeepSound]);
 
   return {
     playClickSound,
     playSuccessSound,
-    isSoundEnabled,
-    toggleSound,
   };
 };

@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { DietMethod } from '@/types'
 import { Skull, Weight, Target, Clock, Coins, Plus, X, Lock } from 'lucide-react'
 import { useSound } from '@/hooks/useSound'
+import NotificationPermissionModal from '@/components/NotificationPermissionModal'
 
 import { 
   getJstYmd, 
@@ -16,7 +17,8 @@ import {
   getUnlockConditionMessage,
   getInitialUnlockedPlans,
   clearUnlockNotification,
-  getUnlockNotificationMessage
+  getUnlockNotificationMessage,
+  getPreferredDietMethods
 } from '@/lib/utils'
 
 // フォールバックのデフォルトダイエット法（DBが空でも提示）
@@ -70,6 +72,8 @@ export default function OnboardingPage() {
   const [refundPlan, setRefundPlan] = useState<'basic' | 'intermediate' | 'advanced'>('basic')
   const [unlockedPlans, setUnlockedPlans] = useState<('basic' | 'intermediate' | 'advanced')[] | null>(null)
   const [showUnlockNotification, setShowUnlockNotification] = useState<'basic' | 'intermediate' | 'advanced' | null>(null)
+  const [showNotificationModal, setShowNotificationModal] = useState(false)
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false)  // eslint-disable-line @typescript-eslint/no-unused-vars
 
   // プロフィール情報からプラン解放状況を取得
   useEffect(() => {
@@ -136,6 +140,23 @@ export default function OnboardingPage() {
       }
 
       setDietMethods(merged)
+
+      // 好みの設定を読み込んで初期選択状態に反映
+      try {
+        const preferred = await getPreferredDietMethods(user.id, supabase)
+        
+        // デフォルトダイエット法の選択状態を設定
+        if (preferred.defaultMethods.length > 0) {
+          setSelectedDietMethods(preferred.defaultMethods)
+        }
+        
+        // カスタムダイエット法の選択状態を設定
+        if (preferred.customMethods.length > 0) {
+          setCustomDietMethods(preferred.customMethods.map(name => ({ name, selected: true })))
+        }
+      } catch (error) {
+        console.error('Error loading preferred diet methods:', error)
+      }
     }
 
     fetchDietMethods()
@@ -198,6 +219,22 @@ export default function OnboardingPage() {
     } catch (error) {
       console.error('Failed to clear unlock notification:', error)
     }
+  }
+
+  // 通知許可ポップアップのハンドラー
+  const handleNotificationAllow = () => {
+    setShowNotificationModal(false)
+    router.push('/dashboard')
+  }
+
+  const handleNotificationDeny = () => {
+    setShowNotificationModal(false)
+    router.push('/dashboard')
+  }
+
+  const handleNotificationLater = () => {
+    setShowNotificationModal(false)
+    router.push('/dashboard')
   }
 
   const handleDietMethodToggle = (methodId: string) => {
@@ -417,7 +454,10 @@ export default function OnboardingPage() {
       }
 
       await refreshProfile()
-      router.push('/dashboard')
+      
+      // オンボーディング完了フラグを設定して通知許可モーダルを表示
+      setOnboardingCompleted(true)
+      setShowNotificationModal(true)
     } catch (error) {
       const e = error as { message?: string }
       console.error('Onboarding error:', error)
@@ -492,12 +532,12 @@ export default function OnboardingPage() {
         )}
 
         {/* プログレスバー */}
-        <div className="mb-8">
+        <div className="mb-6 sm:mb-8">
           <div className="flex justify-between mb-2">
-            <span className="text-sm font-medium text-purple-600">
+            <span className="text-xs sm:text-sm font-medium text-purple-600">
               ステップ {step} / 4
             </span>
-            <span className="text-sm text-gray-500">
+            <span className="text-xs sm:text-sm text-gray-500">
               {Math.round((step / 4) * 100)}% 完了
             </span>
           </div>
@@ -509,20 +549,20 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl p-8">
+        <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
           {step === 1 && (
             <div className="text-center">
-              <Weight className="w-16 h-16 text-purple-600 mx-auto mb-6" />
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              <Weight className="w-12 h-12 sm:w-16 sm:h-16 text-purple-600 mx-auto mb-4 sm:mb-6" />
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
                 体重目標を設定しましょう
               </h2>
-              <p className="text-gray-600 mb-8">
+              <p className="text-sm sm:text-base text-gray-600 mb-6 sm:mb-8 leading-relaxed">
                 現在の体重と30日後の目標体重を教えてください
               </p>
 
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2 text-left">
                     現在の体重 (kg)
                   </label>
                   <input
@@ -530,13 +570,13 @@ export default function OnboardingPage() {
                     step="0.1"
                     value={currentWeight}
                     onChange={(e) => setCurrentWeight(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base placeholder:text-gray-400"
                     placeholder="例: 65.5"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2 text-left">
                     目標体重 (kg)
                   </label>
                   <input
@@ -544,14 +584,14 @@ export default function OnboardingPage() {
                     step="0.1"
                     value={targetWeight}
                     onChange={(e) => setTargetWeight(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base placeholder:text-gray-400"
                     placeholder="例: 62.0"
                   />
                 </div>
 
                 {currentWeight && targetWeight && (
-                  <div className="bg-purple-50 p-4 rounded-lg">
-                    <p className="text-purple-700 font-medium">
+                  <div className="bg-purple-50 p-3 sm:p-4 rounded-lg">
+                    <p className="text-sm sm:text-base text-purple-700 font-medium">
                       目標減量: {(parseFloat(currentWeight) - parseFloat(targetWeight)).toFixed(1)}kg
                     </p>
                   </div>
@@ -562,19 +602,19 @@ export default function OnboardingPage() {
 
           {step === 2 && (
             <div className="text-center">
-              <Target className="w-16 h-16 text-purple-600 mx-auto mb-6" />
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              <Target className="w-12 h-12 sm:w-16 sm:h-16 text-purple-600 mx-auto mb-4 sm:mb-6" />
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
                 ダイエット法を選択しましょう
               </h2>
-              <p className="text-gray-600 mb-8">
+              <p className="text-sm sm:text-base text-gray-600 mb-6 sm:mb-8 leading-relaxed">
                 挑戦したいダイエット法を選んでください（複数選択可能）
               </p>
 
-              <div className="space-y-4 mb-6">
+              <div className="space-y-3 sm:space-y-4 mb-6">
                 {dietMethods.map((method) => (
                   <label
                     key={method.id}
-                    className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                    className={`flex items-start p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition-all ${
                       selectedDietMethods.includes(method.id)
                         ? 'border-purple-500 bg-purple-50'
                         : 'border-gray-200 hover:border-purple-300'
@@ -587,15 +627,15 @@ export default function OnboardingPage() {
                       className="sr-only"
                     />
                     <div className="flex-1 text-left">
-                      <div className="font-medium text-gray-900">{method.name}</div>
-                      <div className="text-sm text-gray-600">{method.description}</div>
+                      <div className="font-medium text-gray-900 text-sm sm:text-base mb-1">{method.name}</div>
+                      <div className="text-xs sm:text-sm text-gray-600 leading-relaxed">{method.description}</div>
                     </div>
                   </label>
                 ))}
               </div>
 
-              <div className="border-t pt-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">
+              <div className="border-t pt-4 sm:pt-6">
+                <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-3 sm:mb-4">
                   カスタムダイエット法を追加
                 </h3>
                 <div className="space-y-3">
@@ -782,7 +822,7 @@ export default function OnboardingPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       期間
@@ -790,7 +830,7 @@ export default function OnboardingPage() {
                     <select
                       value={snackPeriod}
                       onChange={(e) => setSnackPeriod(e.target.value as 'day' | 'week' | 'month')}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base"
                     >
                       <option value="day">1日</option>
                       <option value="week">1週間</option>
@@ -804,7 +844,7 @@ export default function OnboardingPage() {
                     <select
                       value={snackCount}
                       onChange={(e) => setSnackCount(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base"
                     >
                       <option value="0">0個</option>
                       <option value="1">1個</option>
@@ -817,16 +857,16 @@ export default function OnboardingPage() {
                   </div>
                 </div>
 
-                <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg">
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-4 sm:p-6 rounded-lg">
                   <div className="text-center">
-                    <Skull className="w-12 h-12 text-purple-600 mx-auto mb-2" />
-                    <h3 className="text-lg font-bold text-gray-900 mb-2">
+                    <Skull className="w-10 h-10 sm:w-12 sm:h-12 text-purple-600 mx-auto mb-2" />
+                    <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-2">
                       推奨参加費
                     </h3>
-                    <div className="text-3xl font-bold text-purple-600 mb-2">
+                    <div className="text-2xl sm:text-3xl font-bold text-purple-600 mb-2">
                       ¥{participationFee.toLocaleString()}
                     </div>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
                       この金額をマネーモンスターが奪っています！<br />（※実際の集金はありません）
                     </p>
                   </div>
@@ -843,9 +883,9 @@ export default function OnboardingPage() {
                     max="50000"
                     value={participationFee}
                     onChange={(e) => setParticipationFee(parseInt(e.target.value) || 0)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
                     実際の集金はありません。家族や友人に預かってもらってね！
                   </p>
                 </div>
@@ -855,15 +895,15 @@ export default function OnboardingPage() {
 
           {step === 4 && (
             <div className="text-center">
-              <Clock className="w-16 h-16 text-purple-600 mx-auto mb-6" />
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              <Clock className="w-12 h-12 sm:w-16 sm:h-16 text-purple-600 mx-auto mb-4 sm:mb-6" />
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
                 記録時間を設定しましょう
               </h2>
-              <p className="text-gray-600 mb-8">
+              <p className="text-sm sm:text-base text-gray-600 mb-6 sm:mb-8 leading-relaxed">
                 毎日記録する時間を設定してください
               </p>
 
-                  <div className="max-w-xs mx-auto">
+              <div className="max-w-xs mx-auto">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   記録時間
                 </label>
@@ -871,18 +911,18 @@ export default function OnboardingPage() {
                   type="time"
                   value={recordTime}
                   onChange={(e) => setRecordTime(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-center text-lg"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-center text-base sm:text-lg"
                 />
-                <p className="text-sm text-gray-500 mt-2">
+                <p className="text-xs sm:text-sm text-gray-500 mt-2 leading-relaxed">
                   この時間に記録のリマインダーが届きます
                 </p>
               </div>
 
-              <div className="mt-8 bg-purple-50 p-6 rounded-lg">
-                <h3 className="font-bold text-gray-900 mb-4">設定内容の確認</h3>
-                    <div className="space-y-2 text-sm text-gray-600">
-                      <p>目標減量: {(parseFloat(currentWeight || '0') - parseFloat(targetWeight || '0')).toFixed(1)}kg</p>
-                      <p>選択したダイエット法: {selectedDietMethods.length + customDietMethods.filter(m => m.selected && m.name.trim() !== '').length}個</p>
+              <div className="mt-6 sm:mt-8 bg-purple-50 p-4 sm:p-6 rounded-lg">
+                <h3 className="font-bold text-gray-900 mb-3 sm:mb-4 text-base sm:text-lg">設定内容の確認</h3>
+                <div className="space-y-2 text-xs sm:text-sm text-gray-600 leading-relaxed">
+                  <p>目標減量: {(parseFloat(currentWeight || '0') - parseFloat(targetWeight || '0')).toFixed(1)}kg</p>
+                  <p>選択したダイエット法: {selectedDietMethods.length + customDietMethods.filter(m => m.selected && m.name.trim() !== '').length}個</p>
                   <p>返金プラン: {refundPlan === 'basic' ? '初級（MVP）' : refundPlan === 'intermediate' ? '中級' : '上級'}</p>
                   <p>参加費: ¥{participationFee.toLocaleString()}</p>
                   <p>記録時間: {recordTime}</p>
@@ -892,14 +932,14 @@ export default function OnboardingPage() {
           )}
 
           {/* ナビゲーションボタン */}
-          <div className="flex justify-between mt-8">
+          <div className="flex flex-col sm:flex-row justify-between mt-6 sm:mt-8 space-y-3 sm:space-y-0">
             <button
               onClick={() => {
                 playClickSound();
                 prevStep();
               }}
               disabled={step === 1}
-              className="px-6 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full sm:w-auto px-6 py-3 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed font-medium min-h-[44px]"
             >
               戻る
             </button>
@@ -909,7 +949,7 @@ export default function OnboardingPage() {
                 nextStep();
               }}
               disabled={!canProceed() || loading}
-              className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full sm:w-auto px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium min-h-[44px]"
             >
               {loading ? '設定中...' : step === 4 ? 'チャレンジ開始!' : '次へ'}
             </button>
@@ -918,6 +958,15 @@ export default function OnboardingPage() {
 
 
       </div>
+
+      {/* 通知許可ポップアップ */}
+      <NotificationPermissionModal
+        isOpen={showNotificationModal}
+        onClose={handleNotificationLater}
+        onAllow={handleNotificationAllow}
+        onDeny={handleNotificationDeny}
+        recordTime={recordTime}
+      />
     </div>
   )
 }

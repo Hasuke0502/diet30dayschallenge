@@ -24,3 +24,59 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* モバイルでの文字入力の見やすさを向上 */
+input, textarea, select {
+  font-size: 16px !important; /* iOS Safariでのズームを防ぐ */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+/* モバイルでのタッチターゲットサイズを確保 */
+button, a, input[type="submit"], input[type="button"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* モバイルでのフォーカス表示を改善 */
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.3);
+}
+
+/* モバイルでのスクロールを滑らかに */
+html {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* モバイルでのテキスト選択を改善 */
+::selection {
+  background-color: rgba(139, 92, 246, 0.3);
+  color: inherit;
+}
+
+/* モバイルでのタップハイライトを無効化 */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* レスポンシブフォントサイズのベース */
+@media (max-width: 640px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+@media (min-width: 1025px) {
+  html {
+    font-size: 16px;
+  }
+}

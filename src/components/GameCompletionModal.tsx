@@ -31,6 +31,11 @@ export default function GameCompletionModal({
   if (!isOpen) return null
 
   const getResultMessage = () => {
+    // 上級プランでの失敗時の特別メッセージ
+    if (challenge.refund_plan === 'advanced' && challenge.refund_amount === 0) {
+      return 'ゲームオーバー！上級プランでは一度の失敗も許されません。'
+    }
+    
     const rate = moneyMonsterData.achievementRate
     if (rate === 100) {
       return '完全勝利！マネーモンスターを完全に倒しました！'
@@ -63,30 +68,50 @@ export default function GameCompletionModal({
           {/* ヘッダー */}
           <div className="text-center mb-8">
             <div className="mb-4">
-              {moneyMonsterData.achievementRate >= 50 ? (
+              {challenge.refund_plan === 'advanced' && challenge.refund_amount === 0 ? (
+                <Skull className="w-16 h-16 text-red-600 mx-auto" />
+              ) : moneyMonsterData.achievementRate >= 50 ? (
                 <Trophy className="w-16 h-16 text-yellow-500 mx-auto" />
               ) : (
                 <Skull className="w-16 h-16 text-purple-600 mx-auto" />
               )}
             </div>
             <h2 className="text-3xl font-bold text-gray-900 mb-4">
-              30日間のダイエットチャレンジが完了しました！
+              {challenge.refund_plan === 'advanced' && challenge.refund_amount === 0 
+                ? '上級プランチャレンジが終了しました！'
+                : '30日間のダイエットチャレンジが完了しました！'
+              }
             </h2>
             <p className="text-xl font-medium text-purple-600">
-              お疲れ様でした！
+              {challenge.refund_plan === 'advanced' && challenge.refund_amount === 0 
+                ? '残念ながらゲームオーバーです...'
+                : 'お疲れ様でした！'
+              }
             </p>
           </div>
 
           {/* 戦闘結果 */}
-          <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 mb-6">
+          <div className={`rounded-xl p-6 mb-6 ${
+            challenge.refund_plan === 'advanced' && challenge.refund_amount === 0
+              ? 'bg-gradient-to-r from-red-50 to-pink-50'
+              : 'bg-gradient-to-r from-purple-50 to-pink-50'
+          }`}>
             <h3 className="text-xl font-bold text-gray-900 mb-4 text-center">
               マネーモンスターとの戦いの結果
             </h3>
             <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600 mb-2">
+              <div className={`text-2xl font-bold mb-2 ${
+                challenge.refund_plan === 'advanced' && challenge.refund_amount === 0
+                  ? 'text-red-600'
+                  : 'text-purple-600'
+              }`}>
                 {getResultMessage()}
               </div>
-              <Skull className="w-20 h-20 mx-auto text-purple-600 mb-4" />
+              <Skull className={`w-20 h-20 mx-auto mb-4 ${
+                challenge.refund_plan === 'advanced' && challenge.refund_amount === 0
+                  ? 'text-red-600'
+                  : 'text-purple-600'
+              }`} />
             </div>
           </div>
 
@@ -131,7 +156,10 @@ export default function GameCompletionModal({
                 <span className="font-medium text-gray-900">取り戻した金額</span>
               </div>
               <p className="text-2xl font-bold text-yellow-600">
-                ¥{moneyMonsterData.recoveredAmount.toLocaleString()}を取り戻しました
+                {challenge.refund_plan === 'advanced' && challenge.refund_amount === 0
+                  ? '¥0（ゲームオーバーのため返金対象外）'
+                  : `¥${moneyMonsterData.recoveredAmount.toLocaleString()}を取り戻しました`
+                }
               </p>
             </div>
           </div>
@@ -139,8 +167,10 @@ export default function GameCompletionModal({
           {/* 返金に関する案内 */}
           <div className="bg-gray-50 rounded-lg p-4 mb-6">
             <p className="text-sm text-gray-600 text-center">
-              ※ 返金の処理には、銀行営業日で3〜5日程度お時間をいただく場合がございます。
-              返金が完了次第、登録されたメールアドレスにご連絡いたします。
+              {challenge.refund_plan === 'advanced' && challenge.refund_amount === 0
+                ? '※ 上級プランでは一度でも失敗があると返金対象外となります。次回は初級・中級プランから始めて、徐々に難易度を上げることをお勧めします。'
+                : '※ 返金の処理には、銀行営業日で3〜5日程度お時間をいただく場合がございます。返金が完了次第、登録されたメールアドレスにご連絡いたします。'
+              }
             </p>
           </div>
 

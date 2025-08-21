@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
 import CookieBanner from "@/components/CookieBanner";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -49,7 +50,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
+  maximumScale: 5, // ユーザーがズームできるようにする
+  minimumScale: 1,
+  userScalable: true, // ユーザーがズームできるようにする
   themeColor: '#3B82F6',
 };
 
@@ -61,7 +64,7 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen`}
       >
         {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && (
           <GoogleAnalytics measurementId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID} />
@@ -70,6 +73,7 @@ export default function RootLayout({
           {children}
         </AuthProvider>
         <CookieBanner />
+        <ServiceWorkerRegister />
       </body>
     </html>
   );

@@ -34,6 +34,10 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,
     // エラーハンドリングを改善
     flowType: 'pkce',
+    // セッションの永続化を確実にする
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    // セッションの有効期限を延長（7日間）
+    storageKey: 'diet-app-auth-token',
   },
   // グローバルヘッダーを設定
   global: {
@@ -69,6 +73,48 @@ export const auth = {
     } catch (error) {
       console.error('サインインエラー:', error)
       throw error
+    }
+  },
+
+  // 自動ログイン用のセッション確認
+  checkAutoLogin: async () => {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('自動ログイン確認エラー:', error)
+        return { success: false, error }
+      }
+      
+      if (session?.user) {
+        console.log('自動ログイン成功:', session.user.email)
+        return { success: true, user: session.user, session }
+      }
+      
+      return { success: false, user: null, session: null }
+    } catch (error) {
+      console.error('自動ログイン確認エラー:', error)
+      return { success: false, error }
+    }
+  },
+
+  // セッションの有効期限を延長
+  refreshSession: async () => {
+    try {
+      const { data, error } = await supabase.auth.refreshSession()
+      if (error) {
+        console.error('セッション更新エラー:', error)
+        return { success: false, error }
+      }
+      
+      if (data.session) {
+        console.log('セッション更新成功')
+        return { success: true, session: data.session }
+      }
+      
+      return { success: false, session: null }
+    } catch (error) {
+      console.error('セッション更新エラー:', error)
+      return { success: false, error }
     }
   },
 

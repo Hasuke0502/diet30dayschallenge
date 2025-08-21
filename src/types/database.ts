@@ -14,6 +14,8 @@ export interface Database {
           record_time: string | null
           unlocked_plans: ('basic' | 'intermediate' | 'advanced')[] | null
           pending_unlock_notification: ('basic' | 'intermediate' | 'advanced') | null
+          preferred_diet_methods: string[] | null
+          preferred_custom_diet_methods: string[] | null
         }
         Insert: {
           id: string
@@ -25,6 +27,8 @@ export interface Database {
           record_time?: string | null
           unlocked_plans?: ('basic' | 'intermediate' | 'advanced')[] | null
           pending_unlock_notification?: ('basic' | 'intermediate' | 'advanced') | null
+          preferred_diet_methods?: string[] | null
+          preferred_custom_diet_methods?: string[] | null
         }
         Update: {
           email?: string
@@ -35,6 +39,8 @@ export interface Database {
           record_time?: string | null
           unlocked_plans?: ('basic' | 'intermediate' | 'advanced')[] | null
           pending_unlock_notification?: ('basic' | 'intermediate' | 'advanced') | null
+          preferred_diet_methods?: string[] | null
+          preferred_custom_diet_methods?: string[] | null
         }
       }
       challenges: {
