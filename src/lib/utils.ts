@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { SupabaseClient } from '@supabase/supabase-js'
+import { Profile } from '@/types'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -526,7 +527,7 @@ export async function checkAdvancedPlanUnrecordedGameOver(
  * @param profile ユーザープロフィール
  * @returns オンボーディングが完了しているかどうか
  */
-export function isOnboardingCompleted(profile: any): boolean {
+export function isOnboardingCompleted(profile: Profile | null): boolean {
   if (!profile) {
     console.log('isOnboardingCompleted: プロフィールがありません')
     return false
@@ -773,7 +774,7 @@ export async function getPreferredDietMethods(
 
     // フォールバック方式：まず基本カラムで試してから、preferred_カラムを試す
     let profile = null
-    let error = null
+    let error: unknown = null
 
     try {
       // まず基本カラムのみで確認
@@ -819,15 +820,16 @@ export async function getPreferredDietMethods(
     })
 
     if (error) {
+      const errorObj = error as Record<string, unknown>
       console.error('❌ Supabaseクエリエラー - 詳細調査:', {
         error,
         errorType: typeof error,
-        errorConstructor: error.constructor?.name,
-        errorKeys: Object.keys(error),
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
+        errorConstructor: typeof errorObj.constructor === 'function' ? errorObj.constructor.name : undefined,
+        errorKeys: typeof error === 'object' && error !== null ? Object.keys(error) : [],
+        message: typeof errorObj.message === 'string' ? errorObj.message : undefined,
+        code: typeof errorObj.code === 'string' ? errorObj.code : undefined,
+        details: errorObj.details,
+        hint: typeof errorObj.hint === 'string' ? errorObj.hint : undefined,
         // エラーオブジェクト全体をJSON化
         fullError: JSON.stringify(error, null, 2)
       })
