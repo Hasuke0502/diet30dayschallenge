@@ -117,7 +117,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed text-base sm:text-base placeholder:text-gray-400"
+              className="w-full pl-10 pr-4 py-3 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed text-base sm:text-base text-black placeholder:text-gray-400"
               placeholder="your@email.com"
               required
               disabled={loading}
@@ -136,7 +136,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               id="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full pl-10 pr-12 py-3 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed text-base sm:text-base placeholder:text-gray-400"
+              className="w-full pl-10 pr-12 py-3 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed text-base sm:text-base text-black placeholder:text-gray-400"
               placeholder="パスワードを入力"
               required
               minLength={6}

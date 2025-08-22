@@ -132,7 +132,9 @@ export default function SettingsPage() {
         setCurrentDietMethods(current)
 
         // 保存されている好みの設定を取得
+        console.log('⚙️ 設定ページ: 好みの設定読み込み開始', { userId: user.id })
         const preferred = await getPreferredDietMethods(user.id, supabase)
+        console.log('⚙️ 設定ページ: 好みの設定取得結果', preferred)
         
         // 現在の設定が優先、なければ好みの設定を使用
         if (current.defaultMethods.length > 0 || current.customMethods.length > 0) {
@@ -145,7 +147,11 @@ export default function SettingsPage() {
           setCustomDietMethods(preferred.customMethods.map(name => ({ name, selected: true })))
         }
       } catch (error) {
-        console.error('Error fetching diet method settings:', error)
+        console.error('❌ 設定ページ: ダイエット法設定取得エラー:', {
+          error,
+          message: error instanceof Error ? error.message : 'Unknown error',
+          userId: user.id
+        })
       }
     }
 
@@ -492,7 +498,7 @@ export default function SettingsPage() {
                           type="text"
                           value={method.name}
                           onChange={(e) => updateCustomDietMethod(index, e.target.value)}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-black"
                           placeholder="独自のダイエット法を入力"
                           maxLength={50}
                         />

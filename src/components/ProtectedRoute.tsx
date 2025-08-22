@@ -4,7 +4,7 @@ import { useAuth } from './AuthProvider'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { isRefreshTokenError } from '@/lib/utils'
+import { isRefreshTokenError, isOnboardingCompleted } from '@/lib/utils'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -28,7 +28,14 @@ export default function ProtectedRoute({
         return
       }
 
-      if (requireProfile && !profile) {
+      // ユーザーがいるがプロフィールがまだnullの場合は、プロフィール読み込み待ち
+      if (user && profile === null && requireProfile) {
+        console.log('プロフィール読み込み待機中...', { user: !!user, profile })
+        return
+      }
+
+      if (requireProfile && !isOnboardingCompleted(profile)) {
+        console.log('オンボーディング未完了でリダイレクト')
         setIsRedirecting(true)
         router.replace('/onboarding')
         return
@@ -111,7 +118,7 @@ export default function ProtectedRoute({
     return null
   }
 
-  if (requireProfile && !profile) {
+  if (requireProfile && !isOnboardingCompleted(profile)) {
     return null
   }
 

@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { Challenge, DailyRecord, MoneyMonsterData } from '@/types'
 import { Skull, Calendar, TrendingDown, Target, Settings, LogOut, Plus } from 'lucide-react'
 import Link from 'next/link'
-import { getJstYmd, isAfterYmd, formatYmdToJa, addDaysToYmd, calculateRefund, calculateDietSuccessDays, hasAnyDietFailure, unlockNextPlan, checkAdvancedPlanUnrecordedGameOver } from '@/lib/utils'
+import { getJstYmd, isAfterYmd, formatYmdToJa, addDaysToYmd, calculateRefund, calculateDietSuccessDays, hasAnyDietFailure, unlockNextPlan, checkAdvancedPlanUnrecordedGameOver, isOnboardingCompleted } from '@/lib/utils'
 import { useSound } from '@/hooks/useSound'
 
 export default function DashboardPage() {
@@ -46,9 +46,14 @@ export default function DashboardPage() {
         }
 
         if (!challengeData) {
-          // アクティブなチャレンジがない場合はオンボーディングへ
-          router.replace('/onboarding')
-          return
+          // アクティブなチャレンジがない場合の処理
+          if (!isOnboardingCompleted(profile)) {
+            // オンボーディング未完了の場合はオンボーディングへ
+            router.replace('/onboarding')
+            return
+          }
+          // オンボーディング完了済みの場合は、新しいチャレンジを作成するUIを表示
+          // (challengeDataがnullのまま処理を継続)
         }
 
         setChallenge(challengeData)
@@ -295,8 +300,31 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {/* アクティブなチャレンジがない場合の表示 */}
+          {!challenge && !loading && profile && isOnboardingCompleted(profile) && (
+            <div className="bg-white rounded-2xl shadow-sm p-8 mb-8 text-center">
+              <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center">
+                <Plus className="w-8 h-8 text-purple-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">新しいチャレンジを開始しましょう！</h3>
+              <p className="text-gray-600 mb-6">
+                現在アクティブなチャレンジがありません。<br />
+                新しい30日チャレンジを開始して、目標体重を目指しませんか？
+              </p>
+              <button
+                onClick={() => {
+                  playClickSound()
+                  router.push('/onboarding')
+                }}
+                className="px-8 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+              >
+                新しいチャレンジを開始
+              </button>
+            </div>
+          )}
+
           {/* データが読み込まれていない場合の表示 */}
-          {!challenge && !loading && (
+          {!challenge && !loading && (!profile || !isOnboardingCompleted(profile)) && (
             <div className="bg-white rounded-2xl shadow-sm p-8 mb-8 text-center">
               <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-600 mx-auto mb-4"></div>
               <p className="text-gray-600">チャレンジ情報を読み込み中...</p>

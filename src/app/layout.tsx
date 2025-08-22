@@ -20,11 +20,10 @@ export const metadata: Metadata = {
   title: "ダイエット30日チャレンジ",
   description: "マネーモンスターを倒してお金と健康を取り戻そう！",
   icons: {
-    icon: '/favicon.ico',
     apple: '/apple-touch-icon.png',
   },
   manifest: '/site.webmanifest',
-  metadataBase: new URL(process.env.NODE_ENV === 'production' ? 'https://diet-challenge.app' : 'http://localhost:3000'),
+  metadataBase: new URL(process.env.NODE_ENV === 'production' ? process.env.NEXT_PUBLIC_SITE_URL || 'https://diet-challenge.app' : 'http://localhost:3000'),
   alternates: {
     canonical: '/',
   },

@@ -117,6 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (session?.user) {
             console.log('セッション復元成功:', session.user.email)
             const profileData = await fetchProfile(session.user.id)
+            console.log('プロフィール取得完了:', profileData ? 'あり' : 'なし')
             setProfile(profileData)
           } else {
             setProfile(null)

@@ -143,19 +143,27 @@ export default function OnboardingPage() {
 
       // 好みの設定を読み込んで初期選択状態に反映
       try {
+        console.log('📋 オンボーディング: 好みの設定読み込み開始', { userId: user.id })
         const preferred = await getPreferredDietMethods(user.id, supabase)
+        console.log('📋 オンボーディング: 好みの設定取得結果', preferred)
         
         // デフォルトダイエット法の選択状態を設定
         if (preferred.defaultMethods.length > 0) {
+          console.log('📋 デフォルトダイエット法を設定:', preferred.defaultMethods)
           setSelectedDietMethods(preferred.defaultMethods)
         }
         
         // カスタムダイエット法の選択状態を設定
         if (preferred.customMethods.length > 0) {
+          console.log('📋 カスタムダイエット法を設定:', preferred.customMethods)
           setCustomDietMethods(preferred.customMethods.map(name => ({ name, selected: true })))
         }
       } catch (error) {
-        console.error('Error loading preferred diet methods:', error)
+        console.error('❌ オンボーディング: 好みの設定読み込みエラー:', {
+          error,
+          message: error instanceof Error ? error.message : 'Unknown error',
+          userId: user.id
+        })
       }
     }
 
@@ -570,7 +578,7 @@ export default function OnboardingPage() {
                     step="0.1"
                     value={currentWeight}
                     onChange={(e) => setCurrentWeight(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base placeholder:text-gray-400"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base text-black placeholder:text-gray-400"
                     placeholder="例: 65.5"
                   />
                 </div>
@@ -584,7 +592,7 @@ export default function OnboardingPage() {
                     step="0.1"
                     value={targetWeight}
                     onChange={(e) => setTargetWeight(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base placeholder:text-gray-400"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base text-black placeholder:text-gray-400"
                     placeholder="例: 62.0"
                   />
                 </div>
@@ -656,7 +664,7 @@ export default function OnboardingPage() {
                         type="text"
                         value={method.name}
                         onChange={(e) => updateCustomDietMethod(index, e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                         placeholder="独自のダイエット法を入力"
                         maxLength={50}
                       />
@@ -830,7 +838,7 @@ export default function OnboardingPage() {
                     <select
                       value={snackPeriod}
                       onChange={(e) => setSnackPeriod(e.target.value as 'day' | 'week' | 'month')}
-                      className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base"
+                      className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base text-black"
                     >
                       <option value="day">1日</option>
                       <option value="week">1週間</option>
@@ -844,7 +852,7 @@ export default function OnboardingPage() {
                     <select
                       value={snackCount}
                       onChange={(e) => setSnackCount(e.target.value)}
-                      className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base"
+                      className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base text-black"
                     >
                       <option value="0">0個</option>
                       <option value="1">1個</option>
@@ -883,7 +891,7 @@ export default function OnboardingPage() {
                     max="50000"
                     value={participationFee}
                     onChange={(e) => setParticipationFee(parseInt(e.target.value) || 0)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base text-black"
                   />
                   <p className="text-xs text-gray-500 mt-1 leading-relaxed">
                     実際の集金はありません。家族や友人に預かってもらってね！
@@ -911,7 +919,7 @@ export default function OnboardingPage() {
                   type="time"
                   value={recordTime}
                   onChange={(e) => setRecordTime(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-center text-base sm:text-lg"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-center text-base sm:text-lg text-black"
                 />
                 <p className="text-xs sm:text-sm text-gray-500 mt-2 leading-relaxed">
                   この時間に記録のリマインダーが届きます

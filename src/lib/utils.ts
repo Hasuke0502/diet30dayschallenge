@@ -521,6 +521,40 @@ export async function checkAdvancedPlanUnrecordedGameOver(
   }
 }
 
+/**
+ * オンボーディング完了状態を判定する
+ * @param profile ユーザープロフィール
+ * @returns オンボーディングが完了しているかどうか
+ */
+export function isOnboardingCompleted(profile: any): boolean {
+  if (!profile) {
+    console.log('isOnboardingCompleted: プロフィールがありません')
+    return false
+  }
+  
+  // 必須項目がすべて設定されているかチェック
+  const result = !!(
+    profile.current_weight &&
+    profile.target_weight &&
+    profile.snack_frequency_period &&
+    profile.snack_frequency_count &&
+    profile.record_time
+  )
+  
+  console.log('isOnboardingCompleted:', {
+    result,
+    current_weight: profile.current_weight,
+    target_weight: profile.target_weight,
+    snack_frequency_period: profile.snack_frequency_period,
+    snack_frequency_count: profile.snack_frequency_count,
+    record_time: profile.record_time
+  })
+  
+  return result
+}
+
+
+
 // 自動ログインの状態を確認
 export const checkAutoLoginStatus = () => {
   if (typeof window === 'undefined') return false
@@ -702,20 +736,129 @@ export async function getPreferredDietMethods(
   customMethods: string[]
 }> {
   try {
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('preferred_diet_methods, preferred_custom_diet_methods')
-      .eq('id', userId)
-      .single()
+    console.log('🔍 getPreferredDietMethods開始:', { userId })
+    
+    if (!userId) {
+      console.error('❌ userIdが無効です')
+      return {
+        defaultMethods: [],
+        customMethods: []
+      }
+    }
 
-    if (error) throw error
+    console.log('🔍 Supabaseクエリ実行前:', {
+      table: 'profiles',
+      select: 'preferred_diet_methods, preferred_custom_diet_methods',
+      userId
+    })
+
+    // まず基本的なプロフィール情報を取得してスキーマを確認
+    try {
+      const { data: basicProfile, error: basicError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle()
+      
+      console.log('🔍 基本プロフィール確認:', {
+        hasBasicProfile: !!basicProfile,
+        basicError,
+        profileKeys: basicProfile ? Object.keys(basicProfile) : null,
+        hasPreferredDietMethods: basicProfile ? 'preferred_diet_methods' in basicProfile : false,
+        hasPreferredCustomDietMethods: basicProfile ? 'preferred_custom_diet_methods' in basicProfile : false
+      })
+    } catch (schemaError) {
+      console.error('❌ スキーマ確認エラー:', schemaError)
+    }
+
+    // フォールバック方式：まず基本カラムで試してから、preferred_カラムを試す
+    let profile = null
+    let error = null
+
+    try {
+      // まず基本カラムのみで確認
+      const { data: basicProfile, error: basicError } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (basicError) {
+        console.error('❌ 基本プロフィール取得エラー:', basicError)
+        error = basicError
+      } else if (basicProfile) {
+        console.log('✅ 基本プロフィール確認成功')
+        
+        // 基本プロフィールが存在する場合、preferred_カラムを試す
+        const { data: preferredProfile, error: preferredError } = await supabase
+          .from('profiles')
+          .select('preferred_diet_methods, preferred_custom_diet_methods')
+          .eq('id', userId)
+          .maybeSingle()
+
+        if (preferredError) {
+          console.warn('⚠️ preferred_カラム取得エラー (カラムが存在しない可能性):', preferredError)
+          // カラムが存在しない場合はデフォルト値を返す
+          profile = { preferred_diet_methods: null, preferred_custom_diet_methods: null }
+        } else {
+          profile = preferredProfile
+        }
+      } else {
+        console.log('ℹ️ プロフィール自体が存在しません')
+      }
+    } catch (queryError) {
+      console.error('❌ クエリ実行エラー:', queryError)
+      error = queryError
+    }
+
+    console.log('🔍 Supabaseクエリ実行後:', {
+      hasData: !!profile,
+      hasError: !!error,
+      profile,
+      error
+    })
+
+    if (error) {
+      console.error('❌ Supabaseクエリエラー - 詳細調査:', {
+        error,
+        errorType: typeof error,
+        errorConstructor: error.constructor?.name,
+        errorKeys: Object.keys(error),
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        // エラーオブジェクト全体をJSON化
+        fullError: JSON.stringify(error, null, 2)
+      })
+      
+      throw error
+    }
+
+    // maybeSingle()でprofileがnullの場合（プロフィールが存在しない）
+    if (!profile) {
+      console.log('ℹ️ プロフィールが見つかりません（初回ユーザーまたは該当カラムが未設定）')
+      return {
+        defaultMethods: [],
+        customMethods: []
+      }
+    }
+
+    console.log('✅ プロフィール取得成功:', {
+      preferred_diet_methods: profile?.preferred_diet_methods,
+      preferred_custom_diet_methods: profile?.preferred_custom_diet_methods
+    })
 
     return {
       defaultMethods: profile?.preferred_diet_methods || [],
       customMethods: profile?.preferred_custom_diet_methods || []
     }
   } catch (error) {
-    console.error('Error getting preferred diet methods:', error)
+    console.error('❌ getPreferredDietMethods エラー:', {
+      error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      userId
+    })
     return {
       defaultMethods: [],
       customMethods: []

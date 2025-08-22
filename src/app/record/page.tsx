@@ -53,6 +53,7 @@ export default function RecordPage() {
 
     const fetchData = async () => {
       try {
+        console.log('🔄 fetchData実行開始')
         // アクティブなチャレンジを取得
         const { data: challengeData, error: challengeError } = await supabase
           .from('challenges')
@@ -89,6 +90,45 @@ export default function RecordPage() {
         }
 
         let challengeDietMethods: ChallengeDietMethodJoin[] = await fetchChallengeDietMethods()
+        console.log('取得されたchallengeDietMethods:', challengeDietMethods.length, challengeDietMethods)
+
+        // 重複レコードをクリーンアップ
+        console.log('🧹 重複チェック開始')
+        const duplicateGroups = new Map<string, string[]>()
+        
+        for (const cdm of challengeDietMethods) {
+          if (cdm.custom_diet_method_id) {
+            const key = cdm.custom_diet_method_id
+            if (!duplicateGroups.has(key)) {
+              duplicateGroups.set(key, [])
+            }
+            duplicateGroups.get(key)!.push(cdm.id)
+          }
+        }
+
+        // 重複があるIDを削除（最初の1つを残す）
+        for (const [customMethodId, challengeMethodIds] of duplicateGroups) {
+          if (challengeMethodIds.length > 1) {
+            console.log(`🗑️ 重複発見: ${customMethodId} (${challengeMethodIds.length}個)`)
+            const toDelete = challengeMethodIds.slice(1) // 最初の1つを除いて削除
+            console.log('削除対象:', toDelete)
+            
+            const { error: deleteError } = await supabase
+              .from('challenge_diet_methods')
+              .delete()
+              .in('id', toDelete)
+            
+            if (deleteError) {
+              console.error('重複レコード削除エラー:', deleteError)
+            } else {
+              console.log('✅ 重複レコードを削除しました')
+            }
+          }
+        }
+
+        // クリーンアップ後に再取得
+        challengeDietMethods = await fetchChallengeDietMethods()
+        console.log('🔄 クリーンアップ後のchallengeDietMethods:', challengeDietMethods.length, challengeDietMethods)
 
         // ユーザーのカスタムダイエット法で、まだこのチャレンジに紐付いていないものを自動で追加
         const { data: userCustomMethods, error: customListErr } = await supabase
@@ -111,6 +151,7 @@ export default function RecordPage() {
             }))
 
           if (toLink.length > 0) {
+            console.log('🔗 新規紐付け:', toLink)
             const { error: linkErr } = await supabase
               .from('challenge_diet_methods')
               .insert(toLink)
@@ -123,9 +164,20 @@ export default function RecordPage() {
 
         // ダイエット法のリストを構築
         const methods: DietMethodOption[] = []
+        console.log('ループ開始 - challengeDietMethods配列長:', (challengeDietMethods || []).length)
+        let loopCount = 0
         for (const cdm of challengeDietMethods || []) {
+          loopCount++
+          console.log(`ループ回数: ${loopCount}`)
           const dm = firstOrNull(cdm.diet_methods)
           const cm = firstOrNull(cdm.custom_diet_methods)
+          console.log('処理中のcdm:', {
+            id: cdm.id,
+            diet_method_id: cdm.diet_method_id,
+            custom_diet_method_id: cdm.custom_diet_method_id,
+            dm,
+            cm
+          })
           if (cdm.diet_method_id && dm) {
             methods.push({
               id: cdm.id,
@@ -142,10 +194,13 @@ export default function RecordPage() {
             })
           }
         }
+        console.log('ループ終了 - 総ループ回数:', loopCount)
+        console.log('構築されたmethods:', methods.length, methods)
 
         setDietMethods(methods)
 
         // 今日の記録があるかチェック
+        console.log('📅 今日の日付チェック:', today)
         const { data: todayRecord, error: recordError } = await supabase
           .from('daily_records')
           .select(`
@@ -157,7 +212,7 @@ export default function RecordPage() {
           `)
           .eq('challenge_id', challengeData.id)
           .eq('record_date', today)
-          .single()
+          .maybeSingle() // singleの代わりにmaybeSingleを使用
 
         if (recordError && recordError.code !== 'PGRST116') {
           throw recordError
@@ -201,7 +256,7 @@ export default function RecordPage() {
     }
 
     fetchData()
-  }, [user, router, today])
+  }, [user, today])
 
   const handleDietResultChange = (methodId: string, result: boolean) => {
     setDietResults(prev => ({
@@ -487,7 +542,7 @@ export default function RecordPage() {
                   step="0.1"
                   value={weight}
                   onChange={(e) => setWeight(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-lg text-center"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-lg text-center text-black"
                   placeholder="65.5"
                 />
                 <p className="text-sm text-gray-500 mt-2 text-center">kg</p>
@@ -550,7 +605,7 @@ export default function RecordPage() {
                         <textarea
                           value={counterMeasures[method.id] || ''}
                           onChange={(e) => handleCounterMeasureChange(method.id, e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                           rows={3}
                           placeholder="明日はこうする／避けるために◯◯をする など"
                           maxLength={200}
@@ -573,7 +628,7 @@ export default function RecordPage() {
               <textarea
                 value={moodComment}
                 onChange={(e) => setMoodComment(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                 rows={4}
                 placeholder="今日の気分や体調、感じたことを自由に記録してください..."
               />
