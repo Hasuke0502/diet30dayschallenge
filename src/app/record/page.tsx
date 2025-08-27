@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
 import ProtectedRoute from '@/components/ProtectedRoute'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 import { Challenge, DailyRecord } from '@/types'
 import { Weight, Target, MessageCircle, CheckCircle, ArrowLeft, Save } from 'lucide-react'
 import Link from 'next/link'
@@ -39,6 +39,9 @@ export default function RecordPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [noActiveChallenge, setNoActiveChallenge] = useState(false)
+
+  // Supabaseクライアントを作成
+  const supabase = createClient()
 
   // フォームデータ
   const [weight, setWeight] = useState('')

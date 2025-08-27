@@ -1,6 +1,8 @@
 import { ImageResponse } from 'next/og'
 
 export const runtime = 'edge'
+// Static export対応のための設定
+export const dynamic = 'force-static'
 
 export const alt = 'ダイエット30日チャレンジ - マネーモンスターを倒してお金と健康を取り戻そう'
 export const size = {

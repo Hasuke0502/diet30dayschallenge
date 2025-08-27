@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ダイエット30日チャレンジ</string>
+    <string name="title_activity_main">ダイエット30日チャレンジ</string>
+    <string name="package_name">com.diet.challenge</string>
+    <string name="custom_url_scheme">com.diet.challenge</string>
+</resources>

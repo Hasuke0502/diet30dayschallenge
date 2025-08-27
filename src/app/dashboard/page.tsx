@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import GameCompletionModal from '@/components/GameCompletionModal'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 import { Challenge, DailyRecord, MoneyMonsterData } from '@/types'
 import { Skull, Calendar, TrendingDown, Target, Settings, LogOut, Plus } from 'lucide-react'
 import Link from 'next/link'
@@ -24,6 +24,8 @@ export default function DashboardPage() {
   const [isGameCompleted, setIsGameCompleted] = useState(false)
   const [unlockedPlan, setUnlockedPlan] = useState<'basic' | 'intermediate' | 'advanced' | null>(null)
 
+  // Supabaseクライアントを作成
+  const supabase = createClient()
 
   useEffect(() => {
     if (!user || !profile) return

@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 import { User } from '@supabase/supabase-js'
 import { Profile } from '@/types'
 import { isRefreshTokenError } from '@/lib/utils'
@@ -39,9 +39,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const lastFetchedUserIdRef = useRef<string | null>(null)
   const isTransitioningRef = useRef(false)
   const previousUserRef = useRef<string | null>(null)
+  
+  // Supabaseクライアントを作成
+  const supabase = createClient()
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string, force = false) => {
+    // 既に同じユーザーのプロフィールを取得済みの場合は再取得をスキップ
+    if (!force && lastFetchedUserIdRef.current === userId && profile) {
+      console.log('プロフィール取得をスキップ（既に取得済み）:', userId)
+      return profile
+    }
+
     try {
+      console.log('プロフィール取得開始:', userId)
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -53,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null
       }
       lastFetchedUserIdRef.current = userId
+      console.log('プロフィール取得完了:', userId)
       return data
     } catch (error) {
       console.error('Error fetching profile:', error)
@@ -62,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshProfile = async () => {
     if (user) {
-      const profileData = await fetchProfile(user.id)
+      const profileData = await fetchProfile(user.id, true) // 強制取得
       setProfile(profileData)
     }
   }
@@ -71,7 +82,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearSessionAndRedirect = async () => {
     try {
       console.log('セッションをクリアして再認証を促します')
-      await supabase.auth.signOut()
+      const supabaseClient = createClient()
+      await supabaseClient.auth.signOut()
       setUser(null)
       setProfile(null)
       lastFetchedUserIdRef.current = null
@@ -90,12 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 初期セッション取得
     const getInitialSession = async () => {
       try {
-        // ローカルストレージからセッション情報を確認
-        const storedSession = localStorage.getItem('diet-app-auth-token')
-        if (storedSession) {
-          console.log('ローカルストレージからセッション情報を復元中...')
-        }
-
+        console.log('セッション情報を復元中...')
         const { data: { session }, error } = await supabase.auth.getSession()
         
         // リフレッシュトークンエラーが発生した場合
@@ -177,7 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (session?.user) {
             // 同一ユーザーで既に取得済みの場合の無駄な再フェッチを避ける
             if (lastFetchedUserIdRef.current !== session.user.id || !profile) {
-              const profileData = await fetchProfile(session.user.id)
+              const profileData = await fetchProfile(session.user.id, false)
               setProfile(profileData)
             }
           } else {
@@ -194,13 +201,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe()
       clearInterval(sessionRefreshInterval)
     }
-  }, [user, profile])
+  }, []) // 依存配列を空にして無限ループを防ぐ
 
   const signOut = async () => {
     isTransitioningRef.current = true
     setIsTransitioning(true)
     try {
-      await supabase.auth.signOut()
+      const supabaseClient = createClient()
+      await supabaseClient.auth.signOut()
     } catch (error) {
       console.error('サインアウトエラー:', error)
       // エラーが発生しても状態をリセット

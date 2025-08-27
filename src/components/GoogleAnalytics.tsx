@@ -78,6 +78,9 @@ export const trackDietChallengeEvent = {
   // アカウント作成
   signUp: () => trackEvent('sign_up', 'user_engagement'),
   
+  // ログイン
+  signIn: () => trackEvent('sign_in', 'user_engagement'),
+  
   // チャレンジ開始
   startChallenge: (plan: string, fee: number) => 
     trackEvent('start_challenge', 'challenge', plan, fee),

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 import { DietMethod } from '@/types'
 import { Skull, Weight, Target, Clock, Coins, Plus, X, Lock } from 'lucide-react'
 import { useSound } from '@/hooks/useSound'
@@ -74,6 +74,9 @@ export default function OnboardingPage() {
   const [showUnlockNotification, setShowUnlockNotification] = useState<'basic' | 'intermediate' | 'advanced' | null>(null)
   const [showNotificationModal, setShowNotificationModal] = useState(false)
   const [onboardingCompleted, setOnboardingCompleted] = useState(false)  // eslint-disable-line @typescript-eslint/no-unused-vars
+
+  // Supabaseクライアントを作成
+  const supabase = createClient()
 
   // プロフィール情報からプラン解放状況を取得
   useEffect(() => {

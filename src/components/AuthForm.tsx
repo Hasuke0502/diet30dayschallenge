@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { auth } from '@/lib/supabase'
+import { auth } from '@/lib/auth'
 import { getAuthErrorMessage } from '@/lib/utils'
 import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react'
 import { useAnalyticsEvents } from '@/hooks/useAnalytics'
@@ -44,10 +44,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
         // アナリティクス追跡
         analytics.signUp()
         // 確認メールのポップアップを削除し、onboardingページに遷移
-        // 少し遅延を入れて画面の乱れを防ぐ
-        setTimeout(() => {
-          router.replace('/onboarding')
-        }, 100)
+        router.replace('/onboarding')
       } else {
         console.log('サインイン処理開始')
         const { error, data } = await auth.signIn(email, password)
@@ -55,19 +52,11 @@ export default function AuthForm({ mode }: AuthFormProps) {
         if (error) throw error
         clearTimeout(timeoutId)
         
-        // ログイン成功後、セッションの有効期限を延長
-        try {
-          await auth.refreshSession()
-          console.log('セッション有効期限延長完了')
-        } catch (refreshError) {
-          console.warn('セッション延長エラー（無視）:', refreshError)
-        }
+        // アナリティクス追跡
+        analytics.signIn()
         
-        // ログイン成功後、少し遅延を入れてからダッシュボードに遷移
-        // これにより認証状態の更新と画面遷移の競合を防ぐ
-        setTimeout(() => {
-          router.replace('/dashboard')
-        }, 100)
+        // ログイン成功後、即座にダッシュボードに遷移
+        router.replace('/dashboard')
       }
     } catch (error: unknown) {
       console.error('認証エラー:', error)

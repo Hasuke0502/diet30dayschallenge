@@ -6,8 +6,9 @@ import { ArrowLeft, User, Mail, Bell, BellOff, Clock, Target, Plus, X } from 'lu
 import Link from 'next/link'
 import { useSound } from '@/hooks/useSound'
 import { useNotification } from '@/hooks/useNotification'
+import { useCapacitorNotification } from '@/hooks/useCapacitorNotification'
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 import { getCurrentDietMethods, savePreferredDietMethods, getPreferredDietMethods } from '@/lib/utils'
 import { DietMethod } from '@/types'
 
@@ -50,8 +51,22 @@ export default function SettingsPage() {
     isSupported: isNotificationSupported,
     requestPermission,
     scheduleRecordReminder,
+    clearScheduledNotifications,
     // resetPermission  // 未使用のため無効化
   } = useNotification()
+
+  // Capacitor通知フックもインポート
+  const {
+    status: capacitorNotificationStatus,
+    isSupported: isCapacitorSupported,
+    requestPermission: requestCapacitorPermission,
+    scheduleRecordReminder: scheduleCapacitorRecordReminder,
+    clearScheduledNotifications: clearCapacitorScheduledNotifications,
+    sendTestNotification: sendCapacitorTestNotification,
+  } = useCapacitorNotification()
+  
+  const [debugInfo, setDebugInfo] = useState('')
+  const [isTesting, setIsTesting] = useState(false)
   
   const [recordTime, setRecordTime] = useState('')
   const [isSaving, setIsSaving] = useState(false)
@@ -65,6 +80,9 @@ export default function SettingsPage() {
   const [selectedDietMethods, setSelectedDietMethods] = useState<string[]>([])
   const [customDietMethods, setCustomDietMethods] = useState<{ name: string; selected: boolean }[]>([])
   const [isDietMethodsSaving, setIsDietMethodsSaving] = useState(false)
+
+  // Supabaseクライアントを作成
+  const supabase = createClient()
 
   // プロフィール情報から記録時間を取得
   useEffect(() => {
@@ -162,12 +180,26 @@ export default function SettingsPage() {
   const handleToggleNotification = async () => {
     playClickSound()
     
-    if (notificationStatus === 'granted') {
-      // 通知を無効にする（ブラウザの設定画面に案内）
-      alert('通知を無効にするには、ブラウザの設定から変更してください。')
+    // Capacitorが利用可能な場合はネイティブ通知を使用
+    if (isCapacitorSupported) {
+      if (capacitorNotificationStatus === 'granted') {
+        alert('通知を無効にするには、端末の設定からアプリの通知を無効にしてください。')
+      } else {
+        const result = await requestCapacitorPermission()
+        if (result === 'granted' && recordTime) {
+          await scheduleCapacitorRecordReminder(recordTime)
+        }
+      }
     } else {
-      // 通知許可を要求
-      await requestPermission()
+      // Web通知を使用
+      if (notificationStatus === 'granted') {
+        alert('通知を無効にするには、ブラウザの設定から変更してください。\n\n設定 > 通知 から当サイトの通知を無効にできます。')
+      } else {
+        const result = await requestPermission()
+        if (result === 'granted' && recordTime) {
+          await scheduleRecordReminder(recordTime)
+        }
+      }
     }
   }
 
@@ -187,11 +219,17 @@ export default function SettingsPage() {
       if (error) throw error
 
       // 通知が許可されている場合はリマインダーを再設定
-      if (notificationStatus === 'granted') {
-        scheduleRecordReminder(recordTime)
+      if (isCapacitorSupported && capacitorNotificationStatus === 'granted') {
+        // Capacitor通知を使用
+        await clearCapacitorScheduledNotifications()
+        await scheduleCapacitorRecordReminder(recordTime)
+      } else if (notificationStatus === 'granted') {
+        // Web通知を使用
+        await clearScheduledNotifications()
+        await scheduleRecordReminder(recordTime)
       }
 
-      alert('記録時間を更新しました')
+      alert('記録時間を更新しました。通知時間も更新されました。')
     } catch (error) {
       console.error('記録時間の更新に失敗しました:', error)
       alert('記録時間の更新に失敗しました')
@@ -234,6 +272,201 @@ export default function SettingsPage() {
     const updated = [...customDietMethods]
     updated[index] = { ...updated[index], selected: !updated[index].selected }
     setCustomDietMethods(updated)
+  }
+
+  // 通知のテスト機能
+  const handleTestNotification = async () => {
+    setIsTesting(true)
+    playClickSound()
+
+    try {
+      // Capacitorが利用可能な場合はネイティブ通知をテスト
+      if (isCapacitorSupported) {
+        if (capacitorNotificationStatus !== 'granted') {
+          alert('まず通知を許可してください')
+          return
+        }
+        
+        await sendCapacitorTestNotification()
+        alert('Capacitorテスト通知を送信しました。\n\nネイティブ通知が表示されるはずです。')
+      } else {
+        // Web通知をテスト
+        if (notificationStatus !== 'granted') {
+          alert('まず通知を許可してください')
+          return
+        }
+
+        // 即座に通知を表示
+        if ('Notification' in window) {
+          new Notification('テスト通知', {
+            body: 'これはテスト通知です。この通知が表示されれば、基本的な通知機能は動作しています。',
+            icon: '/icon-192.png',
+            tag: 'test-notification'
+          })
+        }
+
+        // Service Workerからも通知を送信
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'SCHEDULE_NOTIFICATION',
+            schedule: {
+              id: 'test-notification-sw',
+              title: 'Service Worker テスト通知',
+              body: 'Service Workerから送信されたテスト通知です。',
+              scheduledTime: new Date(Date.now() + 3000).toISOString(), // 3秒後
+              url: '/record',
+              sent: false
+            }
+          })
+        }
+
+        alert('テスト通知を送信しました。\n\n1. 即座に通知が表示されます\n2. 3秒後にService Workerから通知が表示されます')
+      }
+    } catch (error) {
+      console.error('テスト通知の送信に失敗しました:', error)
+      alert('テスト通知の送信に失敗しました: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
+  // 手動で記録通知を送信
+  const handleSendRecordNotification = async () => {
+    playClickSound()
+
+    try {
+      if (notificationStatus !== 'granted') {
+        alert('まず通知を許可してください')
+        return
+      }
+
+      // 記録通知を即座に送信
+      if ('Notification' in window) {
+        new Notification('ダイエット記録のお時間です！', {
+          body: 'マネーモンスターを倒すために、今日の記録をつけましょう！',
+          icon: '/icon-192.png',
+          tag: 'manual-record-notification'
+        })
+      }
+
+      alert('記録通知を送信しました！')
+    } catch (error) {
+      console.error('記録通知の送信に失敗しました:', error)
+      alert('記録通知の送信に失敗しました: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    }
+  }
+
+  // 通知スケジュールをクリア
+  const handleClearSchedules = async () => {
+    playClickSound()
+
+    try {
+      if (confirm('すべての通知スケジュールをクリアしますか？\n\n新しいスケジュールを設定するには、記録時間を再保存してください。')) {
+        if (isCapacitorSupported) {
+          await clearCapacitorScheduledNotifications()
+        } else {
+          await clearScheduledNotifications()
+        }
+        alert('通知スケジュールをクリアしました。\n\n記録時間を再保存することで新しいスケジュールが作成されます。')
+      }
+    } catch (error) {
+      console.error('スケジュールクリアに失敗しました:', error)
+      alert('スケジュールクリアに失敗しました: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    }
+  }
+
+  // 手動で通知チェックを実行
+  const handleForceCheckNotifications = async () => {
+    playClickSound()
+
+    try {
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'FORCE_CHECK_NOTIFICATIONS'
+        })
+        alert('通知チェックを実行しました。\n\nコンソールログで詳細を確認できます。\n\n条件に合う通知があれば表示されます。')
+      } else {
+        alert('Service Workerが利用できません')
+      }
+    } catch (error) {
+      console.error('通知チェックに失敗しました:', error)
+      alert('通知チェックに失敗しました: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    }
+  }
+
+  // デバッグ情報を取得
+  const handleGetDebugInfo = async () => {
+    try {
+      let info = '=== 通知デバッグ情報 ===\n\n'
+      
+      // ブラウザ情報
+      info += `ブラウザ: ${navigator.userAgent}\n`
+      info += `通知サポート: ${!!window.Notification}\n`
+      info += `通知許可状態: ${Notification.permission}\n`
+      info += `Service Worker サポート: ${!!navigator.serviceWorker}\n\n`
+      
+      // Service Worker 状態
+      if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration()
+        info += `Service Worker 登録済み: ${!!registration}\n`
+        if (registration) {
+          info += `Service Worker 状態: ${registration.active?.state || 'unknown'}\n`
+          info += `Service Worker スクリプトURL: ${registration.active?.scriptURL || 'unknown'}\n`
+        }
+        info += `Controller 存在: ${!!navigator.serviceWorker.controller}\n\n`
+      }
+      
+      // IndexedDB の通知スケジュール確認
+      try {
+        const db = await openIndexedDB()
+        const schedules = await getSchedulesFromDB(db)
+        info += `保存済み通知スケジュール数: ${schedules.length}\n`
+        
+        if (schedules.length > 0) {
+          info += '\n=== スケジュール一覧 ===\n'
+          schedules.slice(0, 5).forEach((schedule, index) => {
+            const scheduledTime = new Date(schedule.scheduledTime)
+            info += `${index + 1}. ${schedule.title}\n`
+            info += `   予定時刻: ${scheduledTime.toLocaleString()}\n`
+            info += `   送信済み: ${schedule.sent ? 'はい' : 'いいえ'}\n\n`
+          })
+          
+          if (schedules.length > 5) {
+            info += `... (他 ${schedules.length - 5} 件)\n\n`
+          }
+        }
+      } catch (dbError) {
+        info += `IndexedDB エラー: ${dbError instanceof Error ? dbError.message : 'Unknown error'}\n\n`
+      }
+      
+      // 現在時刻
+      info += `現在時刻: ${new Date().toLocaleString()}\n`
+      info += `記録時間設定: ${recordTime || '未設定'}\n`
+      
+      setDebugInfo(info)
+    } catch (error) {
+      setDebugInfo('デバッグ情報の取得に失敗しました: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    }
+  }
+
+  // IndexedDB ヘルパー関数
+  const openIndexedDB = (): Promise<IDBDatabase> => {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('DietAppNotifications', 1)
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result)
+    })
+  }
+
+  const getSchedulesFromDB = (db: IDBDatabase): Promise<any[]> => {  // eslint-disable-line @typescript-eslint/no-explicit-any
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['schedules'], 'readonly')
+      const store = transaction.objectStore('schedules')
+      const request = store.getAll()
+      
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result)
+    })
   }
 
   // ダイエット法設定の保存
@@ -287,15 +520,28 @@ export default function SettingsPage() {
 
   // 通知状態のテキスト取得
   const getNotificationStatusText = () => {
-    if (!isNotificationSupported) return { text: '非対応', color: 'text-gray-500' }
+    // Capacitorが利用可能な場合はネイティブ通知の状態を表示
+    if (isCapacitorSupported) {
+      switch (capacitorNotificationStatus) {
+        case 'granted':
+          return { text: 'ネイティブ許可済み', color: 'text-green-600' }
+        case 'denied':
+          return { text: 'ネイティブ拒否済み', color: 'text-red-600' }
+        default:
+          return { text: 'ネイティブ未設定', color: 'text-yellow-600' }
+      }
+    }
+    
+    // Web通知の状態を表示
+    if (!isNotificationSupported) return { text: 'Web通知非対応', color: 'text-gray-500' }
     
     switch (notificationStatus) {
       case 'granted':
-        return { text: '許可済み', color: 'text-green-600' }
+        return { text: 'Web通知許可済み', color: 'text-green-600' }
       case 'denied':
-        return { text: '拒否済み', color: 'text-red-600' }
+        return { text: 'Web通知拒否済み', color: 'text-red-600' }
       default:
-        return { text: '未設定', color: 'text-yellow-600' }
+        return { text: 'Web通知未設定', color: 'text-yellow-600' }
     }
   }
 
@@ -379,16 +625,16 @@ export default function SettingsPage() {
                     <span className={`text-sm font-medium ${getNotificationStatusText().color}`}>
                       {getNotificationStatusText().text}
                     </span>
-                    {isNotificationSupported && (
+                    {(isCapacitorSupported || isNotificationSupported) && (
                       <button
                         onClick={handleToggleNotification}
                         className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                          notificationStatus === 'granted'
+                          (isCapacitorSupported ? capacitorNotificationStatus : notificationStatus) === 'granted'
                             ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             : 'bg-purple-600 text-white hover:bg-purple-700'
                         }`}
                       >
-                        {notificationStatus === 'granted' ? '設定変更' : '許可する'}
+                        {(isCapacitorSupported ? capacitorNotificationStatus : notificationStatus) === 'granted' ? '設定変更' : '許可する'}
                       </button>
                     )}
                   </div>
@@ -420,14 +666,101 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* 注意事項 */}
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <p className="text-sm text-blue-700 leading-relaxed">
-                    <strong>通知について：</strong><br />
-                    ・ ブラウザで通知を無効にした場合、ここで再度許可できます<br />
-                    ・ 通知は記録時間の前後に送信されます<br />
-                    ・ モバイルデバイスでは、ブラウザがバックグラウンドでも動作している必要があります
-                  </p>
+                {/* 通知機能の説明 */}
+                {isCapacitorSupported ? (
+                  // ネイティブアプリでの通知説明
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <p className="text-sm text-green-700 leading-relaxed">
+                      <strong>🎉 ネイティブアプリでの通知：</strong><br />
+                      ・ <strong>完璧な通知配信</strong>：アプリを閉じていても確実に通知が届きます<br />
+                      ・ <strong>バックグラウンド動作</strong>：他のアプリと同様に動作します<br />
+                      ・ <strong>OSレベルの通知</strong>：端末の通知設定で管理できます<br />
+                      ・ <strong>確実性</strong>：Webブラウザの制限を受けません
+                    </p>
+                  </div>
+                ) : (
+                  // Webアプリでの通知説明
+                  <>
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <p className="text-sm text-blue-700 leading-relaxed">
+                        <strong>Webブラウザでの通知について：</strong><br />
+                        ・ <strong>デスクトップ</strong>：ブラウザを最小化していても通知は届きます<br />
+                        ・ <strong>モバイル</strong>：ブラウザアプリがバックグラウンドで動作している必要があります<br />
+                        ・ <strong>タブを完全に閉じた場合</strong>：通知は届かない場合があります<br />
+                        ・ 通知が届かない場合は、ブラウザタブを開いたままにするか、PWAとしてインストールしてください
+                      </p>
+                    </div>
+
+                    {/* PWA推奨案内 */}
+                    <div className="bg-purple-50 p-4 rounded-lg">
+                      <p className="text-sm text-purple-700 leading-relaxed">
+                        <strong>💡 より確実な通知のために：</strong><br />
+                        このアプリを「ホーム画面に追加」（PWAインストール）すると、ネイティブアプリのように確実に通知が届きます。<br />
+                        <br />
+                        <strong>インストール方法：</strong><br />
+                        • <strong>Android Chrome</strong>：メニュー → 「ホーム画面に追加」<br />
+                        • <strong>iOS Safari</strong>：共有ボタン → 「ホーム画面に追加」<br />
+                        • <strong>デスクトップ</strong>：アドレスバーのインストールアイコンをクリック
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                {/* 通知テスト・デバッグセクション */}
+                <div className="py-3 border-t border-gray-100">
+                  <h3 className="font-medium text-gray-900 mb-3">通知テスト・デバッグ</h3>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={handleTestNotification}
+                        disabled={isTesting || (isCapacitorSupported ? capacitorNotificationStatus : notificationStatus) !== 'granted'}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                      >
+                        {isTesting ? 'テスト中...' : (isCapacitorSupported ? 'ネイティブ通知テスト' : '通知テスト')}
+                      </button>
+                      <button
+                        onClick={handleSendRecordNotification}
+                        disabled={(isCapacitorSupported ? capacitorNotificationStatus : notificationStatus) !== 'granted'}
+                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                      >
+                        記録通知送信
+                      </button>
+                      <button
+                        onClick={handleForceCheckNotifications}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm"
+                      >
+                        通知チェック実行
+                      </button>
+                      <button
+                        onClick={handleGetDebugInfo}
+                        className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium text-sm"
+                      >
+                        デバッグ情報
+                      </button>
+                    </div>
+                    <div className="flex justify-center">
+                      <button
+                        onClick={handleClearSchedules}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium text-sm"
+                      >
+                        スケジュールクリア
+                      </button>
+                    </div>
+                    
+                    {debugInfo && (
+                      <div className="mt-3">
+                        <textarea
+                          value={debugInfo}
+                          readOnly
+                          className="w-full h-48 p-3 border border-gray-300 rounded-lg bg-gray-50 text-xs font-mono"
+                          placeholder="デバッグ情報がここに表示されます"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          この情報を使って通知が動作しない原因を特定できます
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

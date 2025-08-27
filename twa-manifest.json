@@ -1,0 +1,42 @@
+{
+  "packageId": "com.dietapp.challenge30days",
+  "host": "diet-challenge.app",
+  "name": "ダイエット30日チャレンジ",
+  "launcherName": "ダイエットチャレンジ",
+  "display": "standalone",
+  "orientation": "portrait",
+  "themeColor": "#3B82F6",
+  "navigationColor": "#3B82F6",
+  "backgroundColor": "#3B82F6",
+  "startUrl": "/",
+  "iconUrl": "/icon-512.png",
+  "maskableIconUrl": "/icon-512.png",
+  "monochromeIconUrl": "/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "android"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "記録する",
+      "short_name": "記録",
+      "url": "/record",
+      "icon": "/icon-192.png"
+    },
+    {
+      "name": "ダッシュボード",
+      "short_name": "ダッシュ",
+      "url": "/dashboard", 
+      "icon": "/icon-192.png"
+    }
+  ],
+  "enableNotifications": true,
+  "features": {
+    "playBilling": {
+      "enabled": true
+    }
+  }
+}

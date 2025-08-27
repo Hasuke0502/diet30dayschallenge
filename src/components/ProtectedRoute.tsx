@@ -3,7 +3,7 @@
 import { useAuth } from './AuthProvider'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 import { isRefreshTokenError, isOnboardingCompleted } from '@/lib/utils'
 
 interface ProtectedRouteProps {
@@ -19,6 +19,9 @@ export default function ProtectedRoute({
   const router = useRouter()
   const [isRedirecting, setIsRedirecting] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
+  
+  // Supabaseクライアントを作成
+  const supabase = createClient()
 
   useEffect(() => {
     if (!loading && !isRedirecting) {

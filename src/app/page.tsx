@@ -1,28 +1,54 @@
-import type { Metadata } from 'next'
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/components/AuthProvider'
 import { Skull, Target } from 'lucide-react'
 import Link from 'next/link'
-
-export const metadata: Metadata = {
-  title: 'ダイエット30日チャレンジ | マネーモンスターを倒してお金と健康を取り戻そう',
-  description: 'お菓子の甘い誘惑から生まれた悪しき存在「マネーモンスター」があなたのお金を奪っている！毎日の記録でマネーモンスターにダメージを与え、お金を取り戻そう！30日間のダイエットチャレンジで健康とお金の両方を手に入れましょう。',
-  keywords: 'ダイエット, チャレンジ, 30日, お金, 健康, 記録, マネーモンスター',
-  openGraph: {
-    title: 'ダイエット30日チャレンジ | マネーモンスターを倒してお金と健康を取り戻そう',
-    description: 'お菓子の甘い誘惑から生まれた悪しき存在「マネーモンスター」があなたのお金を奪っている！毎日の記録でマネーモンスターにダメージを与え、お金を取り戻そう！',
-    type: 'website',
-    locale: 'ja_JP',
-    url: 'https://diet-challenge.app',
-    siteName: 'ダイエット30日チャレンジ',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    site: '@diet_challenge',
-    title: 'ダイエット30日チャレンジ',
-    description: 'マネーモンスターを倒してお金と健康を取り戻そう！',
-  },
-}
+import { isOnboardingCompleted } from '@/lib/utils'
 
 export default function Home() {
+  const { user, profile, loading } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    // ローディング中は何もしない
+    if (loading) return
+
+    // ログイン済みユーザーの場合
+    if (user) {
+      // プロフィールの読み込み待ち
+      if (profile === null) {
+        console.log('プロフィール読み込み待機中...')
+        return
+      }
+
+      // オンボーディングが完了していない場合
+      if (!isOnboardingCompleted(profile)) {
+        console.log('オンボーディングへリダイレクト')
+        router.replace('/onboarding')
+        return
+      }
+
+      // オンボーディング完了済みの場合、ダッシュボードへリダイレクト
+      console.log('ダッシュボードへリダイレクト')
+      router.replace('/dashboard')
+    }
+  }, [user, profile, loading, router])
+
+  // ローディング中またはログイン済みユーザーには何も表示しない
+  if (loading || user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-r from-purple-600 to-pink-600 text-white flex items-center justify-center">
+        <div className="text-center">
+          <Skull className="w-16 h-16 mx-auto mb-4 animate-bounce text-white" />
+          <p className="text-lg">読み込み中...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // 未ログインユーザーにランディングページを表示
   return (
     <div className="min-h-screen bg-gradient-to-r from-purple-600 to-pink-600 text-white flex items-center justify-center px-4">
       <div className="max-w-4xl mx-auto text-center">
@@ -30,11 +56,10 @@ export default function Home() {
           <Skull className="w-20 h-20 sm:w-32 sm:h-32 mx-auto mb-6 sm:mb-8 animate-bounce text-white" />
         </div>
         <h1 className="text-3xl sm:text-5xl md:text-7xl font-bold mb-6 sm:mb-8 leading-tight">
-          マネーモンスターを倒してお金を取り戻そう！
+          最高のダイエット習慣をつけよう！
         </h1>
         <p className="text-lg sm:text-xl md:text-2xl mb-8 sm:mb-12 max-w-3xl mx-auto leading-relaxed">
-          お菓子の甘い誘惑から生まれた悪しき存在「マネーモンスター」があなたのお金を奪っている！
-          毎日の記録でマネーモンスターにダメージを与え、お金を取り戻そう！
+        頑張っているのにダイエットが成功しない。」同僚から毎日のように相談されます。私は過去に12kgのダイエットに成功しました。しかし努力なんていらないんです。大切なことは「習慣作り」1択です。あなたもそんな習慣をみにつけて、ダイエットを今度こそ成功させませんか？
         </p>
         <Link
           href="/auth/signup"
